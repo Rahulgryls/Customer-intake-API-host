@@ -40,3 +40,21 @@ Sample IDs: `110023456` (org, happy), `110034567` (person, happy), `110045678` (
 No free host is truly always-on with zero cold start (Render, Koyeb, etc. all scale to zero after
 15-60 min idle and take 30-60s to wake). The standard free workaround: point a free uptime monitor
 (UptimeRobot, cron-job.org) at `/health` every 5-10 minutes to keep the instance warm.
+
+## Admin portal
+Live at `/admin` (same Basic Auth as the API). Two tabs:
+- **Manage APIs** — create a brand-new *mock/stub* API on the fly: give it a name, an optional description,
+  and an optional sample JSON response. The app creates a generic endpoint at
+  `/customer-intake/v1/mock/{your-api-slug}` that stores and returns whatever JSON you put in it (list, get,
+  create/update, delete — by record id), and adds it to the Swagger docs automatically. This is deliberately
+  a dumb store-and-return stub, not a real business API: it does not add validation, status-code rules, or
+  filtering logic like the three built-in APIs have. If a mock API later needs real business rules, that
+  still means writing a proper route by hand (same pattern as Customer Details / Risk Profile / Transactions).
+- **Manage Data** — a folder-tree file browser (master folder → one folder per API → JSON records inside)
+  covering both the built-in APIs and anything created in Manage APIs. Open, edit (with a linted JSON editor),
+  upload, download, or delete any record.
+
+Everything the admin portal creates or edits (custom APIs, their data, and edits to the built-in seed data)
+lives on this server's local disk — same as the rest of this app's data. It survives normal restarts but
+resets on a fresh deploy (git push) unless a persistent volume or real database is added. Treat it as
+POC/demo storage: download anything you want to keep before redeploying.

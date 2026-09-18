@@ -181,10 +181,141 @@ app.delete("/admin/api/files/:category/:id", (req, res) => {
   res.json({ status: "ok", category, id: req.params.id });
 });
 
-// --- Swagger UI ---
-const openapiDoc = YAML.load(path.join(__dirname, "openapi.yaml"));
-app.get("/openapi.json", (req, res) => res.json(openapiDoc));
-app.use("/docs", swaggerUi.serve, swaggerUi.setup(openapiDoc, { customSiteTitle: "Customer Intake API Docs" }));
+// --- Admin: API registry (create/list/delete custom mock APIs) ---
+app.get("/admin/api/apis", (req, res) => {
+  const apis = store.listApis().map(a => ({
+    ...a,
+    fileCount: store.listFiles(a.slug).length,
+    endpoint: `/customer-intake/v1/mock/${a.slug}`
+  }));
+  res.json({ apis, builtIn: store.BUILTIN_CATEGORIES });
+});
+
+app.post("/admin/api/apis", (req, res) => {
+  try {
+    const { name, description, sampleResponse } = req.body || {};
+    const entry = store.createApi({ name, description, sampleResponse });
+    res.status(201).json({ ...entry, endpoint: `/customer-intake/v1/mock/${entry.slug}` });
+  } catch (e) {
+    if (e instanceof store.ApiError) {
+      return res.status(e.status).json(errorBody(req, e.status, "ADM-API-" + e.status, "Could not create API", e.message, "body"));
+    }
+    res.status(500).json(errorBody(req, 500, "ADM-API-500", "Unexpected error", e.message, "body"));
+  }
+});
+
+app.delete("/admin/api/apis/:slug", (req, res) => {
+  try {
+    const ok = store.deleteApi(req.params.slug);
+    if (!ok) return res.status(404).json(errorBody(req, 404, "ADM-API-404", "API not found", `No custom API named ${req.params.slug}`, "path.slug"));
+    res.json({ status: "ok", slug: req.params.slug });
+  } catch (e) {
+    if (e instanceof store.ApiError) {
+      return res.status(e.status).json(errorBody(req, e.status, "ADM-API-" + e.status, "Could not delete API", e.message, "path.slug"));
+    }
+    res.status(500).json(errorBody(req, 500, "ADM-API-500", "Unexpected error", e.message, "path.slug"));
+  }
+});
+
+// --- Generic mock endpoint: serves whatever JSON is stored for a custom API ---
+// This is deliberately dumb (store/retrieve JSON, no business rules) - see README.
+function customApiOr404(req, res) {
+  const { apiSlug } = req.params;
+  const known = store.listApis().some(a => a.slug === apiSlug);
+  if (!known) {
+    res.status(404).json(errorBody(req, 404, "MOCK-0404", "Unknown mock API", `No custom API registered as "${apiSlug}" — create it in the admin portal first`, "path.apiSlug"));
+    return false;
+  }
+  return true;
+}
+
+app.get("/customer-intake/v1/mock/:apiSlug", (req, res) => {
+  if (!customApiOr404(req, res)) return;
+  const records = store.listFiles(req.params.apiSlug).map(f => JSON.parse(store.readFileRaw(f.category, f.id)));
+  res.json({ messageHeader: messageHeader(req, "MOCK-STUB"), apiSlug: req.params.apiSlug, count: records.length, records });
+});
+
+app.get("/customer-intake/v1/mock/:apiSlug/:id", (req, res) => {
+  if (!customApiOr404(req, res)) return;
+  const raw = store.readFileRaw(req.params.apiSlug, req.params.id);
+  if (raw === null) {
+    return res.status(404).json(errorBody(req, 404, "MOCK-0404", "Record not found", `No stub record ${req.params.id} for API ${req.params.apiSlug}`, "path.id"));
+  }
+  res.set("Content-Type", "application/json");
+  res.send(raw);
+});
+
+app.put("/customer-intake/v1/mock/:apiSlug/:id", (req, res) => {
+  if (!customApiOr404(req, res)) return;
+  if (!req.body || typeof req.body !== "object") {
+    return res.status(400).json(errorBody(req, 400, "MOCK-0400", "Invalid body", "Request body must be a JSON object", "body"));
+  }
+  store.writeFile(req.params.apiSlug, req.params.id, req.body);
+  res.json({ status: "ok", apiSlug: req.params.apiSlug, id: req.params.id });
+});
+
+app.delete("/customer-intake/v1/mock/:apiSlug/:id", (req, res) => {
+  if (!customApiOr404(req, res)) return;
+  store.deleteFile(req.params.apiSlug, req.params.id);
+  res.json({ status: "ok", apiSlug: req.params.apiSlug, id: req.params.id });
+});
+
+// --- Swagger UI (dynamic: custom mock APIs are merged in on every request, so
+// creating a new API through the portal shows up in Swagger with no redeploy) ---
+const baseOpenapiDoc = YAML.load(path.join(__dirname, "openapi.yaml"));
+
+function inferSchema(value) {
+  if (value === null || value === undefined) return { type: "string", nullable: true };
+  if (Array.isArray(value)) return { type: "array", items: value.length ? inferSchema(value[0]) : {} };
+  switch (typeof value) {
+    case "number": return { type: Number.isInteger(value) ? "integer" : "number" };
+    case "boolean": return { type: "boolean" };
+    case "object": {
+      const properties = {};
+      for (const [k, v] of Object.entries(value)) properties[k] = inferSchema(v);
+      return { type: "object", properties };
+    }
+    default: return { type: "string" };
+  }
+}
+
+function buildOpenApiDoc() {
+  const doc = JSON.parse(JSON.stringify(baseOpenapiDoc));
+  doc.paths = doc.paths || {};
+  for (const api of store.listApis()) {
+    const schema = inferSchema(api.sampleResponse || { note: "no sample provided at creation time" });
+    const base = `/customer-intake/v1/mock/${api.slug}`;
+    doc.paths[base] = {
+      get: {
+        summary: `List ${api.displayName} mock records`, tags: ["Custom Mock APIs (stubs)"],
+        description: api.description || undefined,
+        responses: { 200: { description: "OK", content: { "application/json": { schema: { type: "object", properties: { count: { type: "integer" }, records: { type: "array", items: schema } } } } } } }
+      }
+    };
+    doc.paths[`${base}/{id}`] = {
+      get: {
+        summary: `Get one ${api.displayName} mock record`, tags: ["Custom Mock APIs (stubs)"],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "OK", content: { "application/json": { schema } } }, 404: { description: "Not found" } }
+      },
+      put: {
+        summary: `Create/update a ${api.displayName} mock record`, tags: ["Custom Mock APIs (stubs)"],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: { required: true, content: { "application/json": { schema } } },
+        responses: { 200: { description: "Saved" } }
+      },
+      delete: {
+        summary: `Delete a ${api.displayName} mock record`, tags: ["Custom Mock APIs (stubs)"],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Deleted" } }
+      }
+    };
+  }
+  return doc;
+}
+
+app.get("/openapi.json", (req, res) => res.json(buildOpenApiDoc()));
+app.use("/docs", swaggerUi.serve, swaggerUi.setup(null, { swaggerUrl: "/openapi.json", customSiteTitle: "Customer Intake API Docs" }));
 
 // --- 404 fallback ---
 app.use((req, res) => res.status(404).json(errorBody(req, 404, "GEN-0404", "Not found", "No matching route", "path")));

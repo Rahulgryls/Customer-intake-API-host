@@ -18,7 +18,14 @@
   header { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
   header h1 { font-size:16px; margin:0; font-weight:600; }
   header .sub { color:var(--muted); font-size:12px; }
-  .container { display:flex; height:calc(100vh - 60px); }
+  nav.maintabs { display:flex; gap:4px; padding:10px 20px 0; border-bottom:1px solid var(--border); }
+  nav.maintabs button { background:none; border:none; color:var(--muted); padding:9px 16px; cursor:pointer; font-size:13px; border-radius:6px 6px 0 0; }
+  nav.maintabs button.active { color:var(--text); background:var(--panel); }
+  .page { display:none; }
+  .page.active { display:block; }
+
+  /* --- Manage Data page --- */
+  .container { display:flex; height:calc(100vh - 108px); }
   .sidebar { width:300px; border-right:1px solid var(--border); display:flex; flex-direction:column; }
   .sidebar-toolbar { padding:10px; border-bottom:1px solid var(--border); display:flex; gap:6px; }
   .sidebar-toolbar input[type=text] { flex:1; min-width:0; }
@@ -29,7 +36,6 @@
   .folder-row:hover { background:#1c2436; }
   .folder-row .caret { display:inline-block; transition:transform .12s; color:var(--muted); font-size:11px; width:10px; }
   .folder-row.collapsed .caret { transform:rotate(-90deg); }
-  .folder-row .icon { opacity:0.85; }
   .folder-row .name { font-weight:600; }
   .folder-row .count { color:var(--muted); font-size:11px; margin-left:auto; }
   .folder-children { padding-left:20px; }
@@ -44,7 +50,7 @@
   .empty { color:#555; font-size:12px; padding:10px 12px; }
   .main { flex:1; display:flex; flex-direction:column; padding:14px 18px; min-width:0; }
   .toolbar { display:flex; gap:8px; margin-bottom:10px; align-items:center; flex-wrap:wrap; }
-  input[type=text], select { background:var(--panel); border:1px solid var(--border); color:var(--text); padding:7px 10px; border-radius:6px; font-size:13px; }
+  input[type=text], input[type=email], textarea, select { background:var(--panel); border:1px solid var(--border); color:var(--text); padding:7px 10px; border-radius:6px; font-size:13px; font-family:inherit; }
   button.btn { background:var(--accent); color:white; border:none; padding:7px 14px; border-radius:6px; cursor:pointer; font-size:13px; }
   button.btn.secondary { background:var(--panel); border:1px solid var(--border); color:var(--text); }
   button.btn.danger { background:var(--danger); }
@@ -55,53 +61,212 @@
   .status.ok { color:var(--ok); }
   .status.err { color:var(--danger); }
   .filename-tag { font-family: ui-monospace, monospace; color:var(--muted); font-size:12px; }
+
+  /* --- Manage APIs page --- */
+  .apis-page { padding:20px; max-width:920px; }
+  .apis-note { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-size:12.5px; color:var(--muted); margin-bottom:18px; line-height:1.5; }
+  .create-card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:22px; }
+  .create-card h2 { font-size:14px; margin:0 0 12px; }
+  .form-row { display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
+  .form-row label { font-size:12px; color:var(--muted); }
+  .form-row input, .form-row textarea { width:100%; }
+  .form-row textarea { min-height:110px; font-family: ui-monospace, monospace; font-size:12px; resize:vertical; }
+  .apis-list h2 { font-size:14px; margin:0 0 10px; }
+  table.apis-table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  table.apis-table th, table.apis-table td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); }
+  table.apis-table th { color:var(--muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+  table.apis-table code { font-family: ui-monospace, monospace; background:#0f1420; padding:2px 5px; border-radius:4px; }
+  .builtin-tag { color:var(--muted); font-size:11px; }
+  .create-status { font-size:12.5px; margin-top:6px; min-height:16px; }
+  .create-status.ok { color:var(--ok); }
+  .create-status.err { color:var(--danger); }
 </style>
 </head>
 <body>
 <header>
   <div>
     <h1>Customer Intake API — Admin Portal</h1>
-    <div class="sub">Browse the folder tree, open a file, edit its JSON, upload or delete it</div>
+    <div class="sub">Create mock APIs for stubbing, then browse and edit the JSON files behind every API</div>
   </div>
   <div class="sub" id="counts"></div>
 </header>
-<div class="container">
-  <div class="sidebar">
-    <div class="tree-root">customer-intake-api</div>
-    <div class="sidebar-toolbar">
-      <input type="text" id="search" placeholder="Search files...">
-    </div>
-    <div class="tree" id="tree"></div>
+<nav class="maintabs">
+  <button data-page="apis" class="active">Manage APIs</button>
+  <button data-page="data">Manage Data</button>
+</nav>
+
+<!-- ================= PAGE 1: Manage APIs ================= -->
+<div class="page apis-page active" id="page-apis">
+  <div class="apis-note">
+    <strong>What this creates:</strong> a generic stub endpoint that stores and returns whatever JSON you give it —
+    useful for POC/simulation. It does <em>not</em> generate business rules (validation, status codes, filtering) —
+    those still need to be coded by hand, same as the three built-in APIs (Customer Details, Risk Profile,
+    Transaction History). Created APIs live on this server's local disk, same as everything else here — they
+    survive restarts but reset on a fresh deploy, so treat this as POC/demo storage, not production data.
   </div>
-  <div class="main">
-    <div class="toolbar">
-      <span class="filename-tag" id="currentFile">No file selected</span>
-      <span style="flex:1"></span>
-      <select id="targetFolder"></select>
-      <input type="text" id="newIdInput" placeholder="new file ID (e.g. 110099999)" style="width:190px">
-      <button class="btn secondary" id="newBtn">New File</button>
-      <button class="btn secondary" id="uploadBtn" title="Upload a .json file into the selected folder">Upload</button>
-      <input type="file" id="fileInput" accept=".json,application/json" style="display:none">
-      <button class="btn secondary" id="downloadBtn" disabled>Download</button>
-      <button class="btn" id="saveBtn" disabled>Save</button>
-      <button class="btn danger" id="deleteBtn" disabled>Delete</button>
+
+  <div class="create-card">
+    <h2>Add New API</h2>
+    <div class="form-row">
+      <label>API name</label>
+      <input type="text" id="apiName" placeholder="e.g. Fraud Check">
     </div>
-    <div class="editor-wrap"><textarea id="editor"></textarea></div>
-    <div class="status" id="status"></div>
+    <div class="form-row">
+      <label>Description (optional)</label>
+      <input type="text" id="apiDescription" placeholder="What does this API simulate?">
+    </div>
+    <div class="form-row">
+      <label>Sample response JSON (optional — used to seed a first file and to document the shape in Swagger)</label>
+      <textarea id="apiSample" placeholder='{"exampleField": "value"}'></textarea>
+    </div>
+    <div class="toolbar" style="margin-bottom:0">
+      <button class="btn secondary" id="uploadSampleBtn">Upload sample .json instead</button>
+      <input type="file" id="sampleFileInput" accept=".json,application/json" style="display:none">
+      <span style="flex:1"></span>
+      <button class="btn" id="createApiBtn">Create API</button>
+    </div>
+    <div class="create-status" id="createStatus"></div>
+  </div>
+
+  <div class="apis-list">
+    <h2>Existing APIs</h2>
+    <table class="apis-table">
+      <thead><tr><th>Name</th><th>Endpoint</th><th>Files</th><th>Created</th><th>Type</th><th></th></tr></thead>
+      <tbody id="apisTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ================= PAGE 2: Manage Data ================= -->
+<div class="page" id="page-data">
+  <div class="container">
+    <div class="sidebar">
+      <div class="tree-root">customer-intake-api</div>
+      <div class="sidebar-toolbar">
+        <input type="text" id="search" placeholder="Search files...">
+      </div>
+      <div class="tree" id="tree"></div>
+    </div>
+    <div class="main">
+      <div class="toolbar">
+        <span class="filename-tag" id="currentFile">No file selected</span>
+        <span style="flex:1"></span>
+        <select id="targetFolder"></select>
+        <input type="text" id="newIdInput" placeholder="new file ID (e.g. 110099999)" style="width:190px">
+        <button class="btn secondary" id="newBtn">New File</button>
+        <button class="btn secondary" id="uploadBtn" title="Upload a .json file into the selected folder">Upload</button>
+        <input type="file" id="fileInput" accept=".json,application/json" style="display:none">
+        <button class="btn secondary" id="downloadBtn" disabled>Download</button>
+        <button class="btn" id="saveBtn" disabled>Save</button>
+        <button class="btn danger" id="deleteBtn" disabled>Delete</button>
+      </div>
+      <div class="editor-wrap"><textarea id="editor"></textarea></div>
+      <div class="status" id="status"></div>
+    </div>
   </div>
 </div>
 
 <script>
-// Folder labels shown in the tree/dropdown, keyed by the real category id used in API calls.
-const FOLDER_LABEL = { customers: "customers", "risk-profiles": "risk-profiles", transactions: "transactions" };
-const CATEGORIES = Object.keys(FOLDER_LABEL);
+const $ = s => document.querySelector(s);
 
+// ---------- top-level tab switching ----------
+document.querySelectorAll("nav.maintabs button").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll("nav.maintabs button").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("page-" + btn.dataset.page).classList.add("active");
+    if (btn.dataset.page === "data") refreshList();
+    if (btn.dataset.page === "apis") refreshApis();
+  };
+});
+
+// ================= Manage APIs =================
+const apiNameEl = $("#apiName"), apiDescEl = $("#apiDescription"), apiSampleEl = $("#apiSample"),
+      createStatusEl = $("#createStatus"), apisTableBody = $("#apisTableBody");
+
+function setCreateStatus(msg, ok) { createStatusEl.textContent = msg; createStatusEl.className = "create-status " + (ok === true ? "ok" : ok === false ? "err" : ""); }
+
+async function refreshApis() {
+  const res = await fetch("/admin/api/apis");
+  if (!res.ok) return;
+  const data = await res.json();
+  renderApisTable(data.apis, data.builtIn);
+  populateTargetFolder(data.apis, data.builtIn);
+}
+
+function renderApisTable(apis, builtIn) {
+  apisTableBody.innerHTML = "";
+  const builtinRows = builtIn.map(slug => ({
+    slug, displayName: slug, description: "Built-in, hand-coded business API", endpoint: `/customer-intake/v1/${slug === "customers" ? "customers/{id}" : slug + "/{customerId}"}`,
+    fileCount: null, createdAt: null, builtin: true
+  }));
+  [...builtinRows, ...apis.map(a => ({ ...a, builtin: false }))].forEach(a => {
+    const tr = document.createElement("tr");
+    const created = a.createdAt ? new Date(a.createdAt).toLocaleString() : "—";
+    const files = a.fileCount === null ? "—" : a.fileCount;
+    tr.innerHTML = `
+      <td>${a.displayName}${a.description ? `<div class="builtin-tag">${a.description}</div>` : ""}</td>
+      <td><code>${a.endpoint}</code></td>
+      <td>${files}</td>
+      <td>${created}</td>
+      <td>${a.builtin ? '<span class="builtin-tag">built-in</span>' : '<span class="builtin-tag">custom / mock</span>'}</td>
+      <td>${a.builtin ? "" : `<button class="btn danger delApiBtn" data-slug="${a.slug}">Delete</button>`}</td>
+    `;
+    apisTableBody.appendChild(tr);
+  });
+  document.querySelectorAll(".delApiBtn").forEach(btn => {
+    btn.onclick = async () => {
+      const slug = btn.dataset.slug;
+      if (!confirm(`Delete the "${slug}" API and all its stored files? This cannot be undone.`)) return;
+      const res = await fetch(`/admin/api/apis/${encodeURIComponent(slug)}`, { method: "DELETE" });
+      if (res.ok) { await refreshApis(); } else setCreateStatus("Delete failed (" + res.status + ")", false);
+    };
+  });
+}
+
+$("#uploadSampleBtn").onclick = () => $("#sampleFileInput").click();
+$("#sampleFileInput").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  try { JSON.parse(text); } catch (err) { return setCreateStatus("That file isn't valid JSON: " + err.message, false); }
+  apiSampleEl.value = text;
+  setCreateStatus(`Loaded "${file.name}" into the sample field below`, null);
+  e.target.value = "";
+};
+
+$("#createApiBtn").onclick = async () => {
+  const name = apiNameEl.value.trim();
+  if (!name) return setCreateStatus("Enter an API name first", false);
+  let sampleResponse = null;
+  const raw = apiSampleEl.value.trim();
+  if (raw) {
+    try { sampleResponse = JSON.parse(raw); }
+    catch (e) { return setCreateStatus("Sample response isn't valid JSON: " + e.message, false); }
+  }
+  const res = await fetch("/admin/api/apis", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, description: apiDescEl.value.trim(), sampleResponse })
+  });
+  const data = await res.json();
+  if (res.ok) {
+    setCreateStatus(`Created "${data.displayName}" — endpoint: ${data.endpoint}`, true);
+    apiNameEl.value = ""; apiDescEl.value = ""; apiSampleEl.value = "";
+    await refreshApis();
+  } else {
+    setCreateStatus(data.errors ? data.errors[0].detail : "Failed to create API", false);
+  }
+};
+
+// ================= Manage Data =================
+const BUILTIN_LABEL = { customers: "customers", "risk-profiles": "risk-profiles", transactions: "transactions" };
+let folderLabels = { ...BUILTIN_LABEL };   // slug -> display label, extended with custom APIs
 let currentCategory = null;
 let currentId = null;
-let filesByCategory = {};              // category -> [file, ...]
-let collapsed = {};                    // category -> bool
+let filesByCategory = {};
+let collapsed = {};
 
-const $ = s => document.querySelector(s);
 const treeEl = $("#tree"), statusEl = $("#status"), countsEl = $("#counts"), currentFileEl = $("#currentFile");
 const saveBtn = $("#saveBtn"), deleteBtn = $("#deleteBtn"), downloadBtn = $("#downloadBtn"), targetFolderEl = $("#targetFolder");
 
@@ -110,41 +275,54 @@ const cm = CodeMirror.fromTextArea(document.getElementById("editor"), {
   gutters: ["CodeMirror-lint-markers"], lint: true, tabSize: 2
 });
 
-CATEGORIES.forEach(cat => {
-  const opt = document.createElement("option");
-  opt.value = cat; opt.textContent = FOLDER_LABEL[cat];
-  targetFolderEl.appendChild(opt);
-});
+function populateTargetFolder(apis, builtIn) {
+  folderLabels = {};
+  builtIn.forEach(slug => folderLabels[slug] = slug);
+  apis.forEach(a => folderLabels[a.slug] = a.displayName + " (" + a.slug + ")");
+  const prevValue = targetFolderEl.value;
+  targetFolderEl.innerHTML = "";
+  Object.keys(folderLabels).forEach(slug => {
+    const opt = document.createElement("option");
+    opt.value = slug; opt.textContent = folderLabels[slug];
+    targetFolderEl.appendChild(opt);
+  });
+  if (Object.keys(folderLabels).includes(prevValue)) targetFolderEl.value = prevValue;
+}
 
 function setStatus(msg, ok) { statusEl.textContent = msg; statusEl.className = "status " + (ok === true ? "ok" : ok === false ? "err" : ""); }
 function fmtBytes(n) { return n < 1024 ? n + " B" : (n / 1024).toFixed(1) + " KB"; }
 function fmtDate(iso) { return new Date(iso).toLocaleString(); }
 
 async function refreshList() {
+  // make sure folderLabels includes any custom APIs even if the Manage APIs tab hasn't loaded yet
+  if (Object.keys(folderLabels).length <= 3) {
+    const apiRes = await fetch("/admin/api/apis");
+    if (apiRes.ok) { const d = await apiRes.json(); populateTargetFolder(d.apis, d.builtIn); }
+  }
   const res = await fetch("/admin/api/files");
   if (!res.ok) { setStatus("Failed to list files (" + res.status + ")", false); return; }
   const data = await res.json();
   filesByCategory = {};
-  CATEGORIES.forEach(c => filesByCategory[c] = []);
-  data.files.forEach(f => { if (filesByCategory[f.category]) filesByCategory[f.category].push(f); });
-  CATEGORIES.forEach(c => filesByCategory[c].sort((a, b) => a.id.localeCompare(b.id)));
-  countsEl.textContent = CATEGORIES.map(c => `${FOLDER_LABEL[c]}: ${filesByCategory[c].length}`).join(" · ");
+  Object.keys(folderLabels).forEach(c => filesByCategory[c] = []);
+  data.files.forEach(f => { if (!filesByCategory[f.category]) filesByCategory[f.category] = []; filesByCategory[f.category].push(f); });
+  Object.keys(filesByCategory).forEach(c => filesByCategory[c].sort((a, b) => a.id.localeCompare(b.id)));
+  countsEl.textContent = Object.keys(filesByCategory).map(c => `${folderLabels[c] || c}: ${filesByCategory[c].length}`).join(" · ");
   renderTree();
 }
 
 function renderTree() {
   const q = $("#search").value.trim().toLowerCase();
   treeEl.innerHTML = "";
-  CATEGORIES.forEach(cat => {
+  Object.keys(filesByCategory).forEach(cat => {
     const items = filesByCategory[cat].filter(f => f.id.toLowerCase().includes(q));
-    const isCollapsed = !!collapsed[cat] && q === "";  // auto-expand while searching
+    const isCollapsed = !!collapsed[cat] && q === "";
 
     const folderDiv = document.createElement("div");
     folderDiv.className = "folder";
 
     const row = document.createElement("div");
     row.className = "folder-row" + (isCollapsed ? " collapsed" : "");
-    row.innerHTML = `<span class="caret">▾</span><span class="icon">📁</span><span class="name">${FOLDER_LABEL[cat]}</span><span class="count">${items.length}</span>`;
+    row.innerHTML = `<span class="caret">▾</span><span class="icon">📁</span><span class="name">${folderLabels[cat] || cat}</span><span class="count">${items.length}</span>`;
     row.onclick = () => { collapsed[cat] = !collapsed[cat]; renderTree(); };
     folderDiv.appendChild(row);
 
@@ -189,12 +367,14 @@ $("#newBtn").onclick = () => {
     ? { customerId: id, siebelId: "", partyType: "ORGANISATION", customerStatus: "ACTIVE", customerSince: "2024-01-01" }
     : category === "risk-profiles"
     ? { customerId: id, partyType: "ORGANISATION", creditRiskRating: {}, regulatoryClassification: {}, amlRiskProfile: {} }
-    : { accounts: [], aggregates: {} };
+    : category === "transactions"
+    ? { accounts: [], aggregates: {} }
+    : { id, note: "edit this stub record" };
   cm.setValue(JSON.stringify(template, null, 2));
   currentCategory = category; currentId = id;
   currentFileEl.textContent = `${category}/${id}.json (new, unsaved)`;
   saveBtn.disabled = false; deleteBtn.disabled = true; downloadBtn.disabled = true;
-  setStatus(`New file template ready in "${category}" — edit then Save`, null);
+  setStatus(`New file template ready in "${folderLabels[category] || category}" — edit then Save`, null);
 };
 
 $("#saveBtn").onclick = async () => {
@@ -240,11 +420,12 @@ $("#fileInput").onchange = async (e) => {
   currentCategory = category; currentId = id;
   currentFileEl.textContent = `${category}/${id}.json (uploaded, unsaved — click Save to confirm)`;
   saveBtn.disabled = false; downloadBtn.disabled = true;
-  setStatus(`Loaded upload "${file.name}" into "${category}" as ID "${id}" — review and click Save to write it`, null);
+  setStatus(`Loaded upload "${file.name}" into "${folderLabels[category] || category}" as ID "${id}" — review and click Save to write it`, null);
   e.target.value = "";
 };
 
-refreshList();
+// initial load: Manage APIs tab is active by default
+refreshApis();
 </script>
 </body>
 </html>
