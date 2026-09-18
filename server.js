@@ -181,6 +181,76 @@ app.delete("/admin/api/files/:category/:id", (req, res) => {
   res.json({ status: "ok", category, id: req.params.id });
 });
 
+// Rename a file's id in place (e.g. sample.json -> 1012ab-15.json)
+app.post("/admin/api/files/:category/:id/rename", (req, res) => {
+  const category = validCategory(req, res);
+  if (!category) return;
+  const newId = (req.body && req.body.newId ? String(req.body.newId) : "").trim();
+  if (!newId) {
+    return res.status(400).json(errorBody(req, 400, "ADM-0400", "Missing newId", "Provide newId in the request body", "body.newId"));
+  }
+  try {
+    store.renameFile(category, req.params.id, newId);
+    res.json({ status: "ok", category, oldId: req.params.id, newId });
+  } catch (e) {
+    if (e instanceof store.ApiError) {
+      return res.status(e.status).json(errorBody(req, e.status, "ADM-RENAME-" + e.status, "Could not rename file", e.message, "body.newId"));
+    }
+    res.status(500).json(errorBody(req, 500, "ADM-RENAME-500", "Unexpected error", e.message, "body.newId"));
+  }
+});
+
+// --- Commit a file to GitHub (explicit, one file at a time - NOT automatic persistence) ---
+// Writes into data/committed/<category>/<id>.json in the repo, via the GitHub Contents API,
+// using Node's built-in fetch. Requires GITHUB_TOKEN (repo write access) and GITHUB_REPO
+// ("owner/repo") env vars; without them this endpoint returns 501 and everything else in the
+// app keeps working normally - this is an opt-in convenience, not a requirement.
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const GITHUB_REPO = process.env.GITHUB_REPO;
+const GITHUB_BRANCH = process.env.GITHUB_BRANCH || "main";
+
+app.post("/admin/api/files/:category/:id/commit", async (req, res) => {
+  const category = validCategory(req, res);
+  if (!category) return;
+  if (!GITHUB_TOKEN || !GITHUB_REPO) {
+    return res.status(501).json(errorBody(req, 501, "ADM-GH-501", "GitHub commit not configured",
+      "Set GITHUB_TOKEN and GITHUB_REPO environment variables on the server to enable this", "env"));
+  }
+  const raw = store.readFileRaw(category, req.params.id);
+  if (raw === null) {
+    return res.status(404).json(errorBody(req, 404, "ADM-0404", "File not found", `${category}/${req.params.id}.json does not exist`, "path"));
+  }
+  const repoPath = `data/committed/${category}/${req.params.id}.json`;
+  const ghHeaders = { Authorization: `token ${GITHUB_TOKEN}`, Accept: "application/vnd.github+json", "User-Agent": "customer-intake-api-admin" };
+  try {
+    const apiBase = `https://api.github.com/repos/${GITHUB_REPO}/contents/${repoPath}`;
+    let sha;
+    const existing = await fetch(`${apiBase}?ref=${encodeURIComponent(GITHUB_BRANCH)}`, { headers: ghHeaders });
+    if (existing.status === 200) sha = (await existing.json()).sha;
+    else if (existing.status !== 404) {
+      const t = await existing.text();
+      return res.status(502).json(errorBody(req, 502, "ADM-GH-502", "GitHub lookup failed", t.slice(0, 300), "github"));
+    }
+    const put = await fetch(apiBase, {
+      method: "PUT", headers: { ...ghHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: `Admin portal: commit ${category}/${req.params.id}.json`,
+        content: Buffer.from(raw, "utf8").toString("base64"),
+        branch: GITHUB_BRANCH,
+        ...(sha ? { sha } : {})
+      })
+    });
+    if (!put.ok) {
+      const t = await put.text();
+      return res.status(502).json(errorBody(req, 502, "ADM-GH-502", "GitHub commit failed", t.slice(0, 300), "github"));
+    }
+    const result = await put.json();
+    res.json({ status: "ok", path: repoPath, htmlUrl: result.content && result.content.html_url });
+  } catch (e) {
+    res.status(502).json(errorBody(req, 502, "ADM-GH-502", "GitHub commit failed", e.message, "github"));
+  }
+});
+
 // --- Admin: API registry (create/list/delete custom mock APIs) ---
 app.get("/admin/api/apis", (req, res) => {
   const apis = store.listApis().map(a => ({

@@ -25,6 +25,15 @@ class ApiError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
+// Record ids become filenames on disk - keep them to a safe character set so a
+// crafted id (e.g. containing "/") can never escape the intended folder.
+const ID_PATTERN = /^[A-Za-z0-9._-]{1,80}$/;
+function validateId(id) {
+  if (!ID_PATTERN.test(String(id))) {
+    throw new ApiError(400, "Invalid id — use only letters, numbers, dots, hyphens and underscores (max 80 chars)");
+  }
+}
+
 function dirFor(category) { return path.join(FILES_ROOT, category); }
 
 function loadRegistry() {
@@ -79,13 +88,25 @@ function readFileRaw(category, id) {
 }
 
 function writeFile(category, id, jsonValue) {
+  validateId(id);
   fs.mkdirSync(dirFor(category), { recursive: true });
   fs.writeFileSync(path.join(dirFor(category), id + ".json"), JSON.stringify(jsonValue, null, 2));
 }
 
 function deleteFile(category, id) {
+  validateId(id);
   const p = path.join(dirFor(category), id + ".json");
   if (fs.existsSync(p)) fs.unlinkSync(p);
+}
+
+function renameFile(category, oldId, newId) {
+  validateId(oldId);
+  validateId(newId);
+  const oldPath = path.join(dirFor(category), oldId + ".json");
+  if (!fs.existsSync(oldPath)) throw new ApiError(404, `${category}/${oldId}.json not found`);
+  const newPath = path.join(dirFor(category), newId + ".json");
+  if (fs.existsSync(newPath)) throw new ApiError(409, `${category}/${newId}.json already exists`);
+  fs.renameSync(oldPath, newPath);
 }
 
 // --- API registry: custom mock APIs created via the admin portal ---
@@ -155,7 +176,7 @@ module.exports = {
     for (const [id, c] of Object.entries(loadAll("customers"))) if (c && c.siebelId) idx[c.siebelId] = id;
     return idx;
   },
-  listFiles, readFileRaw, writeFile, deleteFile,
+  listFiles, readFileRaw, writeFile, deleteFile, renameFile,
   listApis, createApi, deleteApi,
   ApiError
 };

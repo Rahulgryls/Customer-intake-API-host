@@ -10,3 +10,11 @@ services:
         sync: false
       - key: NODE_VERSION
         value: 20
+      # Optional: enables the admin portal's "Commit to GitHub" button.
+      # Leave unset and that feature just stays disabled (everything else works fine).
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_REPO
+        sync: false
+      - key: GITHUB_BRANCH
+        value: main

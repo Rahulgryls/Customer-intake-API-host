@@ -178,6 +178,8 @@
         <button class="btn secondary" id="uploadBtn" title="Upload a .json file into the selected folder">Upload</button>
         <input type="file" id="fileInput" accept=".json,application/json" style="display:none">
         <button class="btn secondary" id="downloadBtn" disabled>Download</button>
+        <button class="btn secondary" id="renameBtn" disabled title="Rename this file's ID">Rename</button>
+        <button class="btn secondary" id="commitBtn" disabled title="Commit this file to the GitHub repo (data/committed/)">Commit to GitHub</button>
         <button class="btn" id="saveBtn" disabled>Save</button>
         <button class="btn danger" id="deleteBtn" disabled>Delete</button>
       </div>
@@ -305,7 +307,7 @@ let filesByCategory = {};
 let collapsed = {};
 
 const treeEl = $("#tree"), statusEl = $("#status"), countsEl = $("#counts"), currentFileEl = $("#currentFile");
-const saveBtn = $("#saveBtn"), deleteBtn = $("#deleteBtn"), downloadBtn = $("#downloadBtn"), targetFolderEl = $("#targetFolder"), statusHintEl = $("#statusHint");
+const saveBtn = $("#saveBtn"), deleteBtn = $("#deleteBtn"), downloadBtn = $("#downloadBtn"), renameBtn = $("#renameBtn"), commitBtn = $("#commitBtn"), targetFolderEl = $("#targetFolder"), statusHintEl = $("#statusHint");
 
 function updateStatusHint(category) {
   statusHintEl.textContent = (category && !BUILTIN_LABEL.hasOwnProperty(category))
@@ -396,6 +398,7 @@ async function openFile(category, id) {
   targetFolderEl.value = category;
   currentFileEl.textContent = `${category}/${id}.json`;
   saveBtn.disabled = false; deleteBtn.disabled = false; downloadBtn.disabled = false;
+  renameBtn.disabled = false; commitBtn.disabled = false;
   setStatus("Loaded " + id, null);
   updateStatusHint(category);
   renderTree();
@@ -418,6 +421,7 @@ $("#newBtn").onclick = () => {
   currentCategory = category; currentId = id;
   currentFileEl.textContent = `${category}/${id}.json (new, unsaved)`;
   saveBtn.disabled = false; deleteBtn.disabled = true; downloadBtn.disabled = true;
+  renameBtn.disabled = true; commitBtn.disabled = true;
   setStatus(`New file template ready in "${folderLabels[category] || category}" — edit then Save`, null);
   updateStatusHint(category);
 };
@@ -430,8 +434,11 @@ $("#saveBtn").onclick = async () => {
   const res = await fetch(`/admin/api/files/${currentCategory}/${encodeURIComponent(currentId)}`, {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(parsed)
   });
-  if (res.ok) { setStatus("Saved " + currentId, true); deleteBtn.disabled = false; downloadBtn.disabled = false; await refreshList(); }
-  else setStatus("Save failed (" + res.status + ")", false);
+  if (res.ok) {
+    setStatus("Saved " + currentId, true);
+    deleteBtn.disabled = false; downloadBtn.disabled = false; renameBtn.disabled = false; commitBtn.disabled = false;
+    await refreshList();
+  } else setStatus("Save failed (" + res.status + ")", false);
 };
 
 $("#deleteBtn").onclick = async () => {
@@ -441,9 +448,40 @@ $("#deleteBtn").onclick = async () => {
   if (res.ok) {
     setStatus("Deleted " + currentId, true);
     currentCategory = null; currentId = null; cm.setValue(""); currentFileEl.textContent = "No file selected";
-    saveBtn.disabled = true; deleteBtn.disabled = true; downloadBtn.disabled = true;
+    saveBtn.disabled = true; deleteBtn.disabled = true; downloadBtn.disabled = true; renameBtn.disabled = true; commitBtn.disabled = true;
     await refreshList();
   } else setStatus("Delete failed (" + res.status + ")", false);
+};
+
+$("#renameBtn").onclick = async () => {
+  if (!currentCategory || !currentId) return;
+  const newId = prompt(`Rename ${currentCategory}/${currentId}.json to (new ID, without .json):`, currentId);
+  if (!newId || newId.trim() === "" || newId.trim() === currentId) return;
+  const res = await fetch(`/admin/api/files/${currentCategory}/${encodeURIComponent(currentId)}/rename`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ newId: newId.trim() })
+  });
+  const data = await res.json();
+  if (res.ok) {
+    setStatus(`Renamed ${currentId} → ${data.newId}`, true);
+    currentId = data.newId;
+    currentFileEl.textContent = `${currentCategory}/${currentId}.json`;
+    await refreshList();
+    renderTree();
+  } else setStatus(data.errors ? data.errors[0].detail : "Rename failed", false);
+};
+
+$("#commitBtn").onclick = async () => {
+  if (!currentCategory || !currentId) return;
+  setStatus(`Committing ${currentId} to GitHub...`, null);
+  const res = await fetch(`/admin/api/files/${currentCategory}/${encodeURIComponent(currentId)}/commit`, { method: "POST" });
+  const data = await res.json();
+  if (res.ok) {
+    setStatus(`Committed to GitHub: ${data.path}${data.htmlUrl ? " — " + data.htmlUrl : ""}`, true);
+  } else if (res.status === 501) {
+    setStatus("GitHub commit isn't configured on this server (needs GITHUB_TOKEN + GITHUB_REPO env vars)", false);
+  } else {
+    setStatus(data.errors ? data.errors[0].detail : "Commit failed", false);
+  }
 };
 
 $("#downloadBtn").onclick = () => {
@@ -464,7 +502,7 @@ $("#fileInput").onchange = async (e) => {
   cm.setValue(JSON.stringify(parsed, null, 2));
   currentCategory = category; currentId = id;
   currentFileEl.textContent = `${category}/${id}.json (uploaded, unsaved — click Save to confirm)`;
-  saveBtn.disabled = false; downloadBtn.disabled = true;
+  saveBtn.disabled = false; downloadBtn.disabled = true; renameBtn.disabled = true; commitBtn.disabled = true;
   setStatus(`Loaded upload "${file.name}" into "${folderLabels[category] || category}" as ID "${id}" — review and click Save to write it`, null);
   updateStatusHint(category);
   e.target.value = "";

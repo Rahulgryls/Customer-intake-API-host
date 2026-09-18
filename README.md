@@ -58,3 +58,20 @@ Everything the admin portal creates or edits (custom APIs, their data, and edits
 lives on this server's local disk — same as the rest of this app's data. It survives normal restarts but
 resets on a fresh deploy (git push) unless a persistent volume or real database is added. Treat it as
 POC/demo storage: download anything you want to keep before redeploying.
+
+## File rename & "Commit to GitHub" (Manage Data tab)
+- **Rename** — change a file's ID in place (e.g. turn `sample.json` into something meaningful like
+  `1012ab-15.json`) without re-uploading or losing edits.
+- **Commit to GitHub** — writes the currently-open file into this repo at `data/committed/{category}/{id}.json`
+  via the GitHub API, so that one file survives a redeploy (everything else in `data/files/` still resets, as
+  described above — this button snapshots one file at a time on purpose, it isn't automatic persistence).
+  Requires two environment variables on the server:
+  - `GITHUB_TOKEN` — a GitHub personal access token with **contents: write** access to this repo only
+    (a fine-grained PAT scoped to just this repository is safest).
+  - `GITHUB_REPO` — `owner/repo`, e.g. `Rahulgryls/Customer-intake-API-host`.
+  - `GITHUB_BRANCH` (optional, defaults to `main`).
+
+  Without these set, the button just replies that GitHub commit isn't configured — nothing else in the app
+  is affected. **Security note:** once configured, anyone with the admin Basic Auth credential can trigger a
+  real commit to this GitHub repo (scoped only to the `data/committed/` folder, never your app code) — treat
+  that credential as more sensitive once this is turned on, and rotate it periodically.
