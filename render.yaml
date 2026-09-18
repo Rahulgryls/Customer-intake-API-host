@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: customer-intake-api-host
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: API_KEYS
+        sync: false
+      - key: NODE_VERSION
+        value: 20
