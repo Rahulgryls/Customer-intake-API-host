@@ -117,33 +117,57 @@ app.get("/customer-intake/v1/customers/:customerId/transactions", (req, res) => 
   });
 });
 
-// --- Admin portal: view/add/edit/delete the underlying mock data ---
+// --- Admin portal: a simple file manager over the underlying mock data ---
+// Every record is a real .json file under data/files/<category>/<id>.json.
 // Protected by the same Basic Auth as the rest of the API (see middleware above).
 app.get("/admin", (req, res) => res.sendFile(path.join(__dirname, "public", "admin.html")));
 
-app.get("/admin/api/data", (req, res) => {
-  res.json({ customers: store.customers, riskProfiles: store.riskProfiles, transactions: store.transactions });
+function validCategory(req, res) {
+  const { category } = req.params;
+  if (!store.CATEGORIES.includes(category)) {
+    res.status(400).json(errorBody(req, 400, "ADM-0400", "Unknown category", `category must be one of: ${store.CATEGORIES.join(", ")}`, "path.category"));
+    return null;
+  }
+  return category;
+}
+
+// List files, optionally filtered by ?category=
+app.get("/admin/api/files", (req, res) => {
+  const cats = req.query.category ? [req.query.category] : store.CATEGORIES;
+  const files = cats.filter(c => store.CATEGORIES.includes(c)).flatMap(c => store.listFiles(c));
+  res.json({ files });
 });
 
-function adminCrud(basePath, upsertFn, deleteFn) {
-  app.put(basePath + "/:id", (req, res) => {
-    const { id } = req.params;
-    if (!req.body || typeof req.body !== "object") {
-      return res.status(400).json(errorBody(req, 400, "ADM-0400", "Invalid body", "Request body must be a JSON object", "body"));
-    }
-    upsertFn(id, req.body);
-    res.json({ status: "ok", id });
-  });
-  app.delete(basePath + "/:id", (req, res) => {
-    deleteFn(req.params.id);
-    res.json({ status: "ok", id: req.params.id });
-  });
-}
-adminCrud("/admin/api/customers", store.upsertCustomer, store.deleteCustomer);
-adminCrud("/admin/api/risk-profiles", store.upsertRiskProfile, store.deleteRiskProfile);
-adminCrud("/admin/api/transactions", store.upsertTransactions, store.deleteTransactions);
+// Read one file's raw JSON content (also used for download)
+app.get("/admin/api/files/:category/:id", (req, res) => {
+  const category = validCategory(req, res);
+  if (!category) return;
+  const raw = store.readFileRaw(category, req.params.id);
+  if (raw === null) {
+    return res.status(404).json(errorBody(req, 404, "ADM-0404", "File not found", `${category}/${req.params.id}.json does not exist`, "path"));
+  }
+  res.set("Content-Type", "application/json");
+  if (req.query.download === "true") res.set("Content-Disposition", `attachment; filename="${req.params.id}.json"`);
+  res.send(raw);
+});
 
-app.post("/admin/api/reset", (req, res) => { store.resetToDefaults(); res.json({ status: "ok" }); });
+// Create or update (also how uploads land: client reads the uploaded file, then PUTs its parsed content)
+app.put("/admin/api/files/:category/:id", (req, res) => {
+  const category = validCategory(req, res);
+  if (!category) return;
+  if (!req.body || typeof req.body !== "object") {
+    return res.status(400).json(errorBody(req, 400, "ADM-0400", "Invalid body", "Request body must be a JSON object", "body"));
+  }
+  store.writeFile(category, req.params.id, req.body);
+  res.json({ status: "ok", category, id: req.params.id });
+});
+
+app.delete("/admin/api/files/:category/:id", (req, res) => {
+  const category = validCategory(req, res);
+  if (!category) return;
+  store.deleteFile(category, req.params.id);
+  res.json({ status: "ok", category, id: req.params.id });
+});
 
 // --- Swagger UI ---
 const openapiDoc = YAML.load(path.join(__dirname, "openapi.yaml"));

@@ -4,155 +4,223 @@
 <meta charset="UTF-8">
 <title>Customer Intake API — Admin</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/lint/lint.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/lint/json-lint.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jshint/2.13.6/jshint.min.js"></script>
 <style>
   :root { --bg:#0f1420; --panel:#161d2e; --border:#2a3348; --text:#e6e9f0; --muted:#8b93a7; --accent:#5b8def; --danger:#e5484d; --ok:#2fb573; }
   * { box-sizing: border-box; }
   body { margin:0; font-family: -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
-  header { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+  header { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
   header h1 { font-size:16px; margin:0; font-weight:600; }
   header .sub { color:var(--muted); font-size:12px; }
-  .layout { display:flex; height:calc(100vh - 53px); }
+  .layout { display:flex; height:calc(100vh - 60px); }
   nav.tabs { display:flex; gap:4px; padding:10px 20px 0; border-bottom:1px solid var(--border); }
   nav.tabs button { background:none; border:none; color:var(--muted); padding:8px 14px; cursor:pointer; font-size:13px; border-radius:6px 6px 0 0; }
   nav.tabs button.active { color:var(--text); background:var(--panel); }
-  .sidebar { width:230px; border-right:1px solid var(--border); overflow-y:auto; padding:10px; }
-  .sidebar .item { padding:8px 10px; border-radius:6px; cursor:pointer; font-size:13px; color:var(--muted); margin-bottom:2px; word-break:break-all; }
-  .sidebar .item:hover { background:var(--panel); color:var(--text); }
-  .sidebar .item.active { background:var(--accent); color:white; }
-  .main { flex:1; display:flex; flex-direction:column; padding:16px 20px; overflow-y:auto; }
-  .toolbar { display:flex; gap:8px; margin-bottom:10px; align-items:center; }
+  .container { display:flex; flex:1; }
+  .sidebar { width:280px; border-right:1px solid var(--border); display:flex; flex-direction:column; }
+  .sidebar-toolbar { padding:10px; border-bottom:1px solid var(--border); display:flex; gap:6px; }
+  .sidebar-toolbar input[type=text] { flex:1; min-width:0; }
+  .filelist { flex:1; overflow-y:auto; padding:6px; }
+  .file-item { padding:9px 10px; border-radius:6px; cursor:pointer; font-size:13px; margin-bottom:2px; }
+  .file-item .name { color:var(--text); font-family: ui-monospace, monospace; }
+  .file-item .meta { color:var(--muted); font-size:11px; margin-top:2px; }
+  .file-item:hover { background:#1c2436; }
+  .file-item.active { background:var(--accent); }
+  .file-item.active .meta { color:#dbe6ff; }
+  .empty { color:#555; font-size:12px; padding:14px; }
+  .main { flex:1; display:flex; flex-direction:column; padding:14px 18px; min-width:0; }
+  .toolbar { display:flex; gap:8px; margin-bottom:10px; align-items:center; flex-wrap:wrap; }
   input[type=text] { background:var(--panel); border:1px solid var(--border); color:var(--text); padding:7px 10px; border-radius:6px; font-size:13px; }
   button.btn { background:var(--accent); color:white; border:none; padding:7px 14px; border-radius:6px; cursor:pointer; font-size:13px; }
   button.btn.secondary { background:var(--panel); border:1px solid var(--border); color:var(--text); }
   button.btn.danger { background:var(--danger); }
-  textarea { flex:1; width:100%; background:#0a0e17; color:#d7ffe0; border:1px solid var(--border); border-radius:8px; padding:14px; font-family:ui-monospace, monospace; font-size:12.5px; line-height:1.5; resize:none; min-height:300px; }
+  button.btn:disabled { opacity:0.4; cursor:not-allowed; }
+  .editor-wrap { flex:1; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .CodeMirror { height:100% !important; font-size:12.5px; }
   .status { font-size:12px; margin-top:8px; min-height:16px; }
   .status.ok { color:var(--ok); }
   .status.err { color:var(--danger); }
-  .container { display:flex; flex:1; gap:0; }
+  .filename-tag { font-family: ui-monospace, monospace; color:var(--muted); font-size:12px; }
 </style>
 </head>
 <body>
 <header>
   <div>
     <h1>Customer Intake API — Admin Portal</h1>
-    <div class="sub">View, add, edit and delete the mock records served by the API</div>
+    <div class="sub">Browse, upload, edit and delete the JSON files behind each API</div>
   </div>
   <div class="sub" id="counts"></div>
 </header>
 <nav class="tabs">
-  <button data-tab="customers" class="active">Customers</button>
-  <button data-tab="riskProfiles">Risk Profiles</button>
-  <button data-tab="transactions">Transactions</button>
+  <button data-cat="customers" class="active">Customers</button>
+  <button data-cat="risk-profiles">Risk Profiles</button>
+  <button data-cat="transactions">Transactions</button>
 </nav>
 <div class="container">
-  <div class="sidebar" id="sidebar"></div>
+  <div class="sidebar">
+    <div class="sidebar-toolbar">
+      <input type="text" id="search" placeholder="Search files...">
+      <button class="btn secondary" id="uploadBtn" title="Upload a .json file">Upload</button>
+      <input type="file" id="fileInput" accept=".json,application/json" style="display:none">
+    </div>
+    <div class="filelist" id="filelist"></div>
+  </div>
   <div class="main">
     <div class="toolbar">
-      <input type="text" id="idInput" placeholder="customer ID (e.g. 110023456)">
-      <button class="btn" id="loadBtn">Load / New</button>
-      <button class="btn secondary" id="saveBtn">Save</button>
-      <button class="btn danger" id="deleteBtn">Delete</button>
+      <span class="filename-tag" id="currentFile">No file selected</span>
+      <span style="flex:1"></span>
+      <input type="text" id="newIdInput" placeholder="new file ID (e.g. 110099999)">
+      <button class="btn secondary" id="newBtn">New File</button>
+      <button class="btn secondary" id="downloadBtn" disabled>Download</button>
+      <button class="btn" id="saveBtn" disabled>Save</button>
+      <button class="btn danger" id="deleteBtn" disabled>Delete</button>
     </div>
-    <textarea id="editor" placeholder="Select a record on the left, or type an ID above and click Load / New, then edit this JSON and Save."></textarea>
+    <div class="editor-wrap"><textarea id="editor"></textarea></div>
     <div class="status" id="status"></div>
   </div>
 </div>
 
 <script>
-let data = { customers: {}, riskProfiles: {}, transactions: {} };
-let tab = "customers";
-const endpointFor = { customers: "/admin/api/customers", riskProfiles: "/admin/api/risk-profiles", transactions: "/admin/api/transactions" };
+let category = "customers";
+let currentId = null;
+let files = [];
 
-const $ = (sel) => document.querySelector(sel);
-const sidebar = $("#sidebar"), editor = $("#editor"), idInput = $("#idInput"), statusEl = $("#status"), countsEl = $("#counts");
+const $ = s => document.querySelector(s);
+const filelistEl = $("#filelist"), statusEl = $("#status"), countsEl = $("#counts"), currentFileEl = $("#currentFile");
+const saveBtn = $("#saveBtn"), deleteBtn = $("#deleteBtn"), downloadBtn = $("#downloadBtn");
 
-function setStatus(msg, ok) {
-  statusEl.textContent = msg;
-  statusEl.className = "status " + (ok === true ? "ok" : ok === false ? "err" : "");
+const cm = CodeMirror.fromTextArea(document.getElementById("editor"), {
+  mode: "application/json", theme: "material-darker", lineNumbers: true,
+  gutters: ["CodeMirror-lint-markers"], lint: true, tabSize: 2
+});
+
+function setStatus(msg, ok) { statusEl.textContent = msg; statusEl.className = "status " + (ok === true ? "ok" : ok === false ? "err" : ""); }
+function fmtBytes(n) { return n < 1024 ? n + " B" : (n / 1024).toFixed(1) + " KB"; }
+function fmtDate(iso) { return new Date(iso).toLocaleString(); }
+
+async function refreshList() {
+  const res = await fetch("/admin/api/files?category=" + category);
+  if (!res.ok) { setStatus("Failed to list files (" + res.status + ")", false); return; }
+  const data = await res.json();
+  files = data.files;
+  renderList();
+  const totalRes = await fetch("/admin/api/files");
+  const totalData = await totalRes.json();
+  const byCat = {};
+  totalData.files.forEach(f => byCat[f.category] = (byCat[f.category] || 0) + 1);
+  countsEl.textContent = `Customers: ${byCat["customers"]||0} · Risk Profiles: ${byCat["risk-profiles"]||0} · Transactions: ${byCat["transactions"]||0}`;
 }
 
-async function fetchAll() {
-  const res = await fetch("/admin/api/data");
-  if (!res.ok) { setStatus("Failed to load data (" + res.status + ")", false); return; }
-  data = await res.json();
-  renderSidebar();
-  renderCounts();
-}
-
-function renderCounts() {
-  countsEl.textContent = `Customers: ${Object.keys(data.customers).length} · Risk Profiles: ${Object.keys(data.riskProfiles).length} · Transactions: ${Object.keys(data.transactions).length}`;
-}
-
-function renderSidebar() {
-  const ids = Object.keys(data[tab]).sort();
-  sidebar.innerHTML = "";
-  if (ids.length === 0) sidebar.innerHTML = '<div class="item" style="cursor:default;color:#555">No records yet</div>';
-  ids.forEach(id => {
+function renderList() {
+  const q = $("#search").value.trim().toLowerCase();
+  const shown = files.filter(f => f.id.toLowerCase().includes(q));
+  filelistEl.innerHTML = "";
+  if (shown.length === 0) { filelistEl.innerHTML = '<div class="empty">No files</div>'; return; }
+  shown.forEach(f => {
     const div = document.createElement("div");
-    div.className = "item";
-    div.textContent = id;
-    div.onclick = () => selectRecord(id);
-    sidebar.appendChild(div);
+    div.className = "file-item" + (f.id === currentId ? " active" : "");
+    div.innerHTML = `<div class="name">${f.filename}</div><div class="meta">${fmtBytes(f.sizeBytes)} · ${fmtDate(f.updatedAt)}</div>`;
+    div.onclick = () => openFile(f.id);
+    filelistEl.appendChild(div);
   });
 }
 
-function selectRecord(id) {
-  idInput.value = id;
-  editor.value = JSON.stringify(data[tab][id], null, 2);
+async function openFile(id) {
+  const res = await fetch(`/admin/api/files/${category}/${encodeURIComponent(id)}`);
+  if (!res.ok) return setStatus("Failed to open " + id, false);
+  const text = await res.text();
+  cm.setValue(text);
+  currentId = id;
+  currentFileEl.textContent = `${category}/${id}.json`;
+  saveBtn.disabled = false; deleteBtn.disabled = false; downloadBtn.disabled = false;
   setStatus("Loaded " + id, null);
-  [...sidebar.children].forEach(c => c.classList.toggle("active", c.textContent === id));
+  renderList();
 }
 
 document.querySelectorAll("nav.tabs button").forEach(btn => {
   btn.onclick = () => {
     document.querySelectorAll("nav.tabs button").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
-    tab = btn.dataset.tab;
-    idInput.value = "";
-    editor.value = "";
-    renderSidebar();
+    category = btn.dataset.cat;
+    currentId = null;
+    cm.setValue("");
+    currentFileEl.textContent = "No file selected";
+    saveBtn.disabled = true; deleteBtn.disabled = true; downloadBtn.disabled = true;
     setStatus("", null);
+    refreshList();
   };
 });
 
-$("#loadBtn").onclick = () => {
-  const id = idInput.value.trim();
-  if (!id) return setStatus("Enter an ID first", false);
-  if (data[tab][id]) { selectRecord(id); }
-  else {
-    editor.value = tab === "customers"
-      ? JSON.stringify({ customerId: id, siebelId: "", partyType: "ORGANISATION", customerStatus: "ACTIVE", customerSince: "2024-01-01" }, null, 2)
-      : tab === "riskProfiles"
-      ? JSON.stringify({ customerId: id, partyType: "ORGANISATION", creditRiskRating: {}, regulatoryClassification: {}, amlRiskProfile: {} }, null, 2)
-      : JSON.stringify({ accounts: [], aggregates: {} }, null, 2);
-    setStatus("New record template for " + id + " — edit and Save", null);
-  }
+$("#search").oninput = renderList;
+
+$("#newBtn").onclick = () => {
+  const id = $("#newIdInput").value.trim();
+  if (!id) return setStatus("Enter a new file ID first", false);
+  const template = category === "customers"
+    ? { customerId: id, siebelId: "", partyType: "ORGANISATION", customerStatus: "ACTIVE", customerSince: "2024-01-01" }
+    : category === "risk-profiles"
+    ? { customerId: id, partyType: "ORGANISATION", creditRiskRating: {}, regulatoryClassification: {}, amlRiskProfile: {} }
+    : { accounts: [], aggregates: {} };
+  cm.setValue(JSON.stringify(template, null, 2));
+  currentId = id;
+  currentFileEl.textContent = `${category}/${id}.json (new, unsaved)`;
+  saveBtn.disabled = false; deleteBtn.disabled = true; downloadBtn.disabled = true;
+  setStatus("New file template ready — edit then Save", null);
 };
 
 $("#saveBtn").onclick = async () => {
-  const id = idInput.value.trim();
-  if (!id) return setStatus("Enter an ID first", false);
+  if (!currentId) return;
   let parsed;
-  try { parsed = JSON.parse(editor.value); }
+  try { parsed = JSON.parse(cm.getValue()); }
   catch (e) { return setStatus("Invalid JSON: " + e.message, false); }
-  const res = await fetch(endpointFor[tab] + "/" + encodeURIComponent(id), {
+  const res = await fetch(`/admin/api/files/${category}/${encodeURIComponent(currentId)}`, {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(parsed)
   });
-  if (res.ok) { setStatus("Saved " + id, true); await fetchAll(); selectRecord(id); }
-  else { setStatus("Save failed (" + res.status + ")", false); }
+  if (res.ok) { setStatus("Saved " + currentId, true); deleteBtn.disabled = false; downloadBtn.disabled = false; await refreshList(); }
+  else setStatus("Save failed (" + res.status + ")", false);
 };
 
 $("#deleteBtn").onclick = async () => {
-  const id = idInput.value.trim();
-  if (!id) return setStatus("Enter an ID first", false);
-  if (!confirm("Delete " + id + " from " + tab + "?")) return;
-  const res = await fetch(endpointFor[tab] + "/" + encodeURIComponent(id), { method: "DELETE" });
-  if (res.ok) { setStatus("Deleted " + id, true); idInput.value = ""; editor.value = ""; await fetchAll(); }
-  else { setStatus("Delete failed (" + res.status + ")", false); }
+  if (!currentId) return;
+  if (!confirm(`Delete ${category}/${currentId}.json? This cannot be undone.`)) return;
+  const res = await fetch(`/admin/api/files/${category}/${encodeURIComponent(currentId)}`, { method: "DELETE" });
+  if (res.ok) {
+    setStatus("Deleted " + currentId, true);
+    currentId = null; cm.setValue(""); currentFileEl.textContent = "No file selected";
+    saveBtn.disabled = true; deleteBtn.disabled = true; downloadBtn.disabled = true;
+    await refreshList();
+  } else setStatus("Delete failed (" + res.status + ")", false);
 };
 
-fetchAll();
+$("#downloadBtn").onclick = () => {
+  if (!currentId) return;
+  window.open(`/admin/api/files/${category}/${encodeURIComponent(currentId)}?download=true`, "_blank");
+};
+
+$("#uploadBtn").onclick = () => $("#fileInput").click();
+$("#fileInput").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  let parsed;
+  try { parsed = JSON.parse(text); }
+  catch (err) { setStatus("Uploaded file is not valid JSON: " + err.message, false); return; }
+  const id = file.name.replace(/\.json$/i, "");
+  cm.setValue(JSON.stringify(parsed, null, 2));
+  currentId = id;
+  currentFileEl.textContent = `${category}/${id}.json (uploaded, unsaved — click Save to confirm)`;
+  saveBtn.disabled = false; downloadBtn.disabled = true;
+  setStatus(`Loaded upload "${file.name}" as ID "${id}" — review and click Save to write it`, null);
+  e.target.value = "";
+};
+
+refreshList();
 </script>
 </body>
 </html>
