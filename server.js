@@ -15,7 +15,19 @@ const PORT = process.env.PORT || 3000;
 const CREDENTIALS = (process.env.BASIC_AUTH_USERS || "demo:demo123")
   .split(",").map(pair => pair.trim().split(":")).filter(p => p.length === 2);
 
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      // admin portal loads CodeMirror from cdnjs; Swagger UI needs its own inline init script
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "https:"],
+      fontSrc: ["'self'", "https://cdnjs.cloudflare.com", "data:", "https:"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"]
+    }
+  }
+}));
 app.use(cors());
 app.use(express.json());
 app.set("trust proxy", 1);

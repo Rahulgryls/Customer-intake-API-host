@@ -18,25 +18,33 @@
   header { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
   header h1 { font-size:16px; margin:0; font-weight:600; }
   header .sub { color:var(--muted); font-size:12px; }
-  .layout { display:flex; height:calc(100vh - 60px); }
-  nav.tabs { display:flex; gap:4px; padding:10px 20px 0; border-bottom:1px solid var(--border); }
-  nav.tabs button { background:none; border:none; color:var(--muted); padding:8px 14px; cursor:pointer; font-size:13px; border-radius:6px 6px 0 0; }
-  nav.tabs button.active { color:var(--text); background:var(--panel); }
-  .container { display:flex; flex:1; }
-  .sidebar { width:280px; border-right:1px solid var(--border); display:flex; flex-direction:column; }
+  .container { display:flex; height:calc(100vh - 60px); }
+  .sidebar { width:300px; border-right:1px solid var(--border); display:flex; flex-direction:column; }
   .sidebar-toolbar { padding:10px; border-bottom:1px solid var(--border); display:flex; gap:6px; }
   .sidebar-toolbar input[type=text] { flex:1; min-width:0; }
-  .filelist { flex:1; overflow-y:auto; padding:6px; }
-  .file-item { padding:9px 10px; border-radius:6px; cursor:pointer; font-size:13px; margin-bottom:2px; }
-  .file-item .name { color:var(--text); font-family: ui-monospace, monospace; }
-  .file-item .meta { color:var(--muted); font-size:11px; margin-top:2px; }
+  .tree { flex:1; overflow-y:auto; padding:8px 4px; font-size:13px; }
+  .tree-root { padding:6px 8px; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:0.05em; }
+  .folder { user-select:none; }
+  .folder-row { display:flex; align-items:center; gap:6px; padding:7px 8px; border-radius:6px; cursor:pointer; }
+  .folder-row:hover { background:#1c2436; }
+  .folder-row .caret { display:inline-block; transition:transform .12s; color:var(--muted); font-size:11px; width:10px; }
+  .folder-row.collapsed .caret { transform:rotate(-90deg); }
+  .folder-row .icon { opacity:0.85; }
+  .folder-row .name { font-weight:600; }
+  .folder-row .count { color:var(--muted); font-size:11px; margin-left:auto; }
+  .folder-children { padding-left:20px; }
+  .folder-children.collapsed { display:none; }
+  .file-item { display:flex; flex-direction:column; padding:7px 8px 7px 4px; border-radius:6px; cursor:pointer; margin-bottom:1px; }
+  .file-item .row { display:flex; align-items:center; gap:6px; }
+  .file-item .name { color:var(--text); font-family: ui-monospace, monospace; font-size:12.5px; }
+  .file-item .meta { color:var(--muted); font-size:10.5px; margin-top:2px; margin-left:18px; }
   .file-item:hover { background:#1c2436; }
   .file-item.active { background:var(--accent); }
   .file-item.active .meta { color:#dbe6ff; }
-  .empty { color:#555; font-size:12px; padding:14px; }
+  .empty { color:#555; font-size:12px; padding:10px 12px; }
   .main { flex:1; display:flex; flex-direction:column; padding:14px 18px; min-width:0; }
   .toolbar { display:flex; gap:8px; margin-bottom:10px; align-items:center; flex-wrap:wrap; }
-  input[type=text] { background:var(--panel); border:1px solid var(--border); color:var(--text); padding:7px 10px; border-radius:6px; font-size:13px; }
+  input[type=text], select { background:var(--panel); border:1px solid var(--border); color:var(--text); padding:7px 10px; border-radius:6px; font-size:13px; }
   button.btn { background:var(--accent); color:white; border:none; padding:7px 14px; border-radius:6px; cursor:pointer; font-size:13px; }
   button.btn.secondary { background:var(--panel); border:1px solid var(--border); color:var(--text); }
   button.btn.danger { background:var(--danger); }
@@ -53,30 +61,27 @@
 <header>
   <div>
     <h1>Customer Intake API — Admin Portal</h1>
-    <div class="sub">Browse, upload, edit and delete the JSON files behind each API</div>
+    <div class="sub">Browse the folder tree, open a file, edit its JSON, upload or delete it</div>
   </div>
   <div class="sub" id="counts"></div>
 </header>
-<nav class="tabs">
-  <button data-cat="customers" class="active">Customers</button>
-  <button data-cat="risk-profiles">Risk Profiles</button>
-  <button data-cat="transactions">Transactions</button>
-</nav>
 <div class="container">
   <div class="sidebar">
+    <div class="tree-root">customer-intake-api</div>
     <div class="sidebar-toolbar">
       <input type="text" id="search" placeholder="Search files...">
-      <button class="btn secondary" id="uploadBtn" title="Upload a .json file">Upload</button>
-      <input type="file" id="fileInput" accept=".json,application/json" style="display:none">
     </div>
-    <div class="filelist" id="filelist"></div>
+    <div class="tree" id="tree"></div>
   </div>
   <div class="main">
     <div class="toolbar">
       <span class="filename-tag" id="currentFile">No file selected</span>
       <span style="flex:1"></span>
-      <input type="text" id="newIdInput" placeholder="new file ID (e.g. 110099999)">
+      <select id="targetFolder"></select>
+      <input type="text" id="newIdInput" placeholder="new file ID (e.g. 110099999)" style="width:190px">
       <button class="btn secondary" id="newBtn">New File</button>
+      <button class="btn secondary" id="uploadBtn" title="Upload a .json file into the selected folder">Upload</button>
+      <input type="file" id="fileInput" accept=".json,application/json" style="display:none">
       <button class="btn secondary" id="downloadBtn" disabled>Download</button>
       <button class="btn" id="saveBtn" disabled>Save</button>
       <button class="btn danger" id="deleteBtn" disabled>Delete</button>
@@ -87,17 +92,28 @@
 </div>
 
 <script>
-let category = "customers";
+// Folder labels shown in the tree/dropdown, keyed by the real category id used in API calls.
+const FOLDER_LABEL = { customers: "customers", "risk-profiles": "risk-profiles", transactions: "transactions" };
+const CATEGORIES = Object.keys(FOLDER_LABEL);
+
+let currentCategory = null;
 let currentId = null;
-let files = [];
+let filesByCategory = {};              // category -> [file, ...]
+let collapsed = {};                    // category -> bool
 
 const $ = s => document.querySelector(s);
-const filelistEl = $("#filelist"), statusEl = $("#status"), countsEl = $("#counts"), currentFileEl = $("#currentFile");
-const saveBtn = $("#saveBtn"), deleteBtn = $("#deleteBtn"), downloadBtn = $("#downloadBtn");
+const treeEl = $("#tree"), statusEl = $("#status"), countsEl = $("#counts"), currentFileEl = $("#currentFile");
+const saveBtn = $("#saveBtn"), deleteBtn = $("#deleteBtn"), downloadBtn = $("#downloadBtn"), targetFolderEl = $("#targetFolder");
 
 const cm = CodeMirror.fromTextArea(document.getElementById("editor"), {
   mode: "application/json", theme: "material-darker", lineNumbers: true,
   gutters: ["CodeMirror-lint-markers"], lint: true, tabSize: 2
+});
+
+CATEGORIES.forEach(cat => {
+  const opt = document.createElement("option");
+  opt.value = cat; opt.textContent = FOLDER_LABEL[cat];
+  targetFolderEl.appendChild(opt);
 });
 
 function setStatus(msg, ok) { statusEl.textContent = msg; statusEl.className = "status " + (ok === true ? "ok" : ok === false ? "err" : ""); }
@@ -105,61 +121,68 @@ function fmtBytes(n) { return n < 1024 ? n + " B" : (n / 1024).toFixed(1) + " KB
 function fmtDate(iso) { return new Date(iso).toLocaleString(); }
 
 async function refreshList() {
-  const res = await fetch("/admin/api/files?category=" + category);
+  const res = await fetch("/admin/api/files");
   if (!res.ok) { setStatus("Failed to list files (" + res.status + ")", false); return; }
   const data = await res.json();
-  files = data.files;
-  renderList();
-  const totalRes = await fetch("/admin/api/files");
-  const totalData = await totalRes.json();
-  const byCat = {};
-  totalData.files.forEach(f => byCat[f.category] = (byCat[f.category] || 0) + 1);
-  countsEl.textContent = `Customers: ${byCat["customers"]||0} · Risk Profiles: ${byCat["risk-profiles"]||0} · Transactions: ${byCat["transactions"]||0}`;
+  filesByCategory = {};
+  CATEGORIES.forEach(c => filesByCategory[c] = []);
+  data.files.forEach(f => { if (filesByCategory[f.category]) filesByCategory[f.category].push(f); });
+  CATEGORIES.forEach(c => filesByCategory[c].sort((a, b) => a.id.localeCompare(b.id)));
+  countsEl.textContent = CATEGORIES.map(c => `${FOLDER_LABEL[c]}: ${filesByCategory[c].length}`).join(" · ");
+  renderTree();
 }
 
-function renderList() {
+function renderTree() {
   const q = $("#search").value.trim().toLowerCase();
-  const shown = files.filter(f => f.id.toLowerCase().includes(q));
-  filelistEl.innerHTML = "";
-  if (shown.length === 0) { filelistEl.innerHTML = '<div class="empty">No files</div>'; return; }
-  shown.forEach(f => {
-    const div = document.createElement("div");
-    div.className = "file-item" + (f.id === currentId ? " active" : "");
-    div.innerHTML = `<div class="name">${f.filename}</div><div class="meta">${fmtBytes(f.sizeBytes)} · ${fmtDate(f.updatedAt)}</div>`;
-    div.onclick = () => openFile(f.id);
-    filelistEl.appendChild(div);
+  treeEl.innerHTML = "";
+  CATEGORIES.forEach(cat => {
+    const items = filesByCategory[cat].filter(f => f.id.toLowerCase().includes(q));
+    const isCollapsed = !!collapsed[cat] && q === "";  // auto-expand while searching
+
+    const folderDiv = document.createElement("div");
+    folderDiv.className = "folder";
+
+    const row = document.createElement("div");
+    row.className = "folder-row" + (isCollapsed ? " collapsed" : "");
+    row.innerHTML = `<span class="caret">▾</span><span class="icon">📁</span><span class="name">${FOLDER_LABEL[cat]}</span><span class="count">${items.length}</span>`;
+    row.onclick = () => { collapsed[cat] = !collapsed[cat]; renderTree(); };
+    folderDiv.appendChild(row);
+
+    const childrenDiv = document.createElement("div");
+    childrenDiv.className = "folder-children" + (isCollapsed ? " collapsed" : "");
+    if (items.length === 0) {
+      childrenDiv.innerHTML = '<div class="empty">No files</div>';
+    } else {
+      items.forEach(f => {
+        const item = document.createElement("div");
+        item.className = "file-item" + (cat === currentCategory && f.id === currentId ? " active" : "");
+        item.innerHTML = `<div class="row"><span>📄</span><span class="name">${f.filename}</span></div><div class="meta">${fmtBytes(f.sizeBytes)} · ${fmtDate(f.updatedAt)}</div>`;
+        item.onclick = (e) => { e.stopPropagation(); openFile(cat, f.id); };
+        childrenDiv.appendChild(item);
+      });
+    }
+    folderDiv.appendChild(childrenDiv);
+    treeEl.appendChild(folderDiv);
   });
 }
 
-async function openFile(id) {
+async function openFile(category, id) {
   const res = await fetch(`/admin/api/files/${category}/${encodeURIComponent(id)}`);
   if (!res.ok) return setStatus("Failed to open " + id, false);
   const text = await res.text();
   cm.setValue(text);
-  currentId = id;
+  currentCategory = category; currentId = id;
+  targetFolderEl.value = category;
   currentFileEl.textContent = `${category}/${id}.json`;
   saveBtn.disabled = false; deleteBtn.disabled = false; downloadBtn.disabled = false;
   setStatus("Loaded " + id, null);
-  renderList();
+  renderTree();
 }
 
-document.querySelectorAll("nav.tabs button").forEach(btn => {
-  btn.onclick = () => {
-    document.querySelectorAll("nav.tabs button").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    category = btn.dataset.cat;
-    currentId = null;
-    cm.setValue("");
-    currentFileEl.textContent = "No file selected";
-    saveBtn.disabled = true; deleteBtn.disabled = true; downloadBtn.disabled = true;
-    setStatus("", null);
-    refreshList();
-  };
-});
-
-$("#search").oninput = renderList;
+$("#search").oninput = renderTree;
 
 $("#newBtn").onclick = () => {
+  const category = targetFolderEl.value;
   const id = $("#newIdInput").value.trim();
   if (!id) return setStatus("Enter a new file ID first", false);
   const template = category === "customers"
@@ -168,18 +191,18 @@ $("#newBtn").onclick = () => {
     ? { customerId: id, partyType: "ORGANISATION", creditRiskRating: {}, regulatoryClassification: {}, amlRiskProfile: {} }
     : { accounts: [], aggregates: {} };
   cm.setValue(JSON.stringify(template, null, 2));
-  currentId = id;
+  currentCategory = category; currentId = id;
   currentFileEl.textContent = `${category}/${id}.json (new, unsaved)`;
   saveBtn.disabled = false; deleteBtn.disabled = true; downloadBtn.disabled = true;
-  setStatus("New file template ready — edit then Save", null);
+  setStatus(`New file template ready in "${category}" — edit then Save`, null);
 };
 
 $("#saveBtn").onclick = async () => {
-  if (!currentId) return;
+  if (!currentCategory || !currentId) return;
   let parsed;
   try { parsed = JSON.parse(cm.getValue()); }
   catch (e) { return setStatus("Invalid JSON: " + e.message, false); }
-  const res = await fetch(`/admin/api/files/${category}/${encodeURIComponent(currentId)}`, {
+  const res = await fetch(`/admin/api/files/${currentCategory}/${encodeURIComponent(currentId)}`, {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(parsed)
   });
   if (res.ok) { setStatus("Saved " + currentId, true); deleteBtn.disabled = false; downloadBtn.disabled = false; await refreshList(); }
@@ -187,36 +210,37 @@ $("#saveBtn").onclick = async () => {
 };
 
 $("#deleteBtn").onclick = async () => {
-  if (!currentId) return;
-  if (!confirm(`Delete ${category}/${currentId}.json? This cannot be undone.`)) return;
-  const res = await fetch(`/admin/api/files/${category}/${encodeURIComponent(currentId)}`, { method: "DELETE" });
+  if (!currentCategory || !currentId) return;
+  if (!confirm(`Delete ${currentCategory}/${currentId}.json? This cannot be undone.`)) return;
+  const res = await fetch(`/admin/api/files/${currentCategory}/${encodeURIComponent(currentId)}`, { method: "DELETE" });
   if (res.ok) {
     setStatus("Deleted " + currentId, true);
-    currentId = null; cm.setValue(""); currentFileEl.textContent = "No file selected";
+    currentCategory = null; currentId = null; cm.setValue(""); currentFileEl.textContent = "No file selected";
     saveBtn.disabled = true; deleteBtn.disabled = true; downloadBtn.disabled = true;
     await refreshList();
   } else setStatus("Delete failed (" + res.status + ")", false);
 };
 
 $("#downloadBtn").onclick = () => {
-  if (!currentId) return;
-  window.open(`/admin/api/files/${category}/${encodeURIComponent(currentId)}?download=true`, "_blank");
+  if (!currentCategory || !currentId) return;
+  window.open(`/admin/api/files/${currentCategory}/${encodeURIComponent(currentId)}?download=true`, "_blank");
 };
 
 $("#uploadBtn").onclick = () => $("#fileInput").click();
 $("#fileInput").onchange = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
+  const category = targetFolderEl.value;
   const text = await file.text();
   let parsed;
   try { parsed = JSON.parse(text); }
   catch (err) { setStatus("Uploaded file is not valid JSON: " + err.message, false); return; }
   const id = file.name.replace(/\.json$/i, "");
   cm.setValue(JSON.stringify(parsed, null, 2));
-  currentId = id;
+  currentCategory = category; currentId = id;
   currentFileEl.textContent = `${category}/${id}.json (uploaded, unsaved — click Save to confirm)`;
   saveBtn.disabled = false; downloadBtn.disabled = true;
-  setStatus(`Loaded upload "${file.name}" as ID "${id}" — review and click Save to write it`, null);
+  setStatus(`Loaded upload "${file.name}" into "${category}" as ID "${id}" — review and click Save to write it`, null);
   e.target.value = "";
 };
 
