@@ -6,7 +6,8 @@ const rateLimit = require("express-rate-limit");
 const swaggerUi = require("swagger-ui-express");
 const YAML = require("yamljs");
 const path = require("path");
-const { customers, siebelIndex, riskProfiles, transactions, exitedCustomer, sanctionsBlockedCustomer, prospectNoRatingCustomer } = require("./data/mockData");
+const store = require("./data/dataStore");
+const { exitedCustomer, sanctionsBlockedCustomer, prospectNoRatingCustomer } = require("./data/mockData");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -61,13 +62,13 @@ app.get("/customer-intake/v1/customers/:id", (req, res) => {
   const { id } = req.params;
   const idType = req.query.idType || "RABO_CUSTOMER_ID";
   let customerId = id;
-  if (idType === "SIEBEL_ID") customerId = siebelIndex[id];
+  if (idType === "SIEBEL_ID") customerId = store.siebelIndex[id];
 
   if (customerId === exitedCustomer.id) {
     return res.status(422).json(errorBody(req, 422, "CIN-1422", "Customer status does not permit intake",
       `Customer relationship ended on ${exitedCustomer.exitedOn} (status EXITED); credit report intake is not permitted`, "customer.customerStatus"));
   }
-  const customer = customers[customerId];
+  const customer = store.customers[customerId];
   if (!customer) {
     return res.status(404).json(errorBody(req, 404, "CIN-1404", "Customer not found",
       `No active party found for identifier ${id} (idType=${idType})`, "path.id"));
@@ -86,7 +87,7 @@ app.get("/customer-intake/v1/customers/:customerId/risk-profile", (req, res) => 
     return res.status(404).json(errorBody(req, 404, "CIN-2404", "Risk profile not available",
       `No rating exists for customer ${customerId}; initial rating pending CDD completion`, "path.customerId"));
   }
-  const profile = riskProfiles[customerId];
+  const profile = store.riskProfiles[customerId];
   if (!profile) {
     return res.status(404).json(errorBody(req, 404, "CIN-2404", "Risk profile not available",
       `No rating exists for customer ${customerId}`, "path.customerId"));
@@ -98,7 +99,7 @@ app.get("/customer-intake/v1/customers/:customerId/risk-profile", (req, res) => 
 app.get("/customer-intake/v1/customers/:customerId/transactions", (req, res) => {
   const { customerId } = req.params;
   const { dateFrom, dateTo, iban, bookingStatus, pageNumber = 1, pageSize = 200 } = req.query;
-  const data = transactions[customerId];
+  const data = store.transactions[customerId];
   if (!data) {
     return res.status(404).json(errorBody(req, 404, "CIN-3404", "Transaction history not available",
       `No transaction data found for customer ${customerId}`, "path.customerId"));
@@ -115,6 +116,34 @@ app.get("/customer-intake/v1/customers/:customerId/transactions", (req, res) => 
     aggregates: data.aggregates
   });
 });
+
+// --- Admin portal: view/add/edit/delete the underlying mock data ---
+// Protected by the same Basic Auth as the rest of the API (see middleware above).
+app.get("/admin", (req, res) => res.sendFile(path.join(__dirname, "public", "admin.html")));
+
+app.get("/admin/api/data", (req, res) => {
+  res.json({ customers: store.customers, riskProfiles: store.riskProfiles, transactions: store.transactions });
+});
+
+function adminCrud(basePath, upsertFn, deleteFn) {
+  app.put(basePath + "/:id", (req, res) => {
+    const { id } = req.params;
+    if (!req.body || typeof req.body !== "object") {
+      return res.status(400).json(errorBody(req, 400, "ADM-0400", "Invalid body", "Request body must be a JSON object", "body"));
+    }
+    upsertFn(id, req.body);
+    res.json({ status: "ok", id });
+  });
+  app.delete(basePath + "/:id", (req, res) => {
+    deleteFn(req.params.id);
+    res.json({ status: "ok", id: req.params.id });
+  });
+}
+adminCrud("/admin/api/customers", store.upsertCustomer, store.deleteCustomer);
+adminCrud("/admin/api/risk-profiles", store.upsertRiskProfile, store.deleteRiskProfile);
+adminCrud("/admin/api/transactions", store.upsertTransactions, store.deleteTransactions);
+
+app.post("/admin/api/reset", (req, res) => { store.resetToDefaults(); res.json({ status: "ok" }); });
 
 // --- Swagger UI ---
 const openapiDoc = YAML.load(path.join(__dirname, "openapi.yaml"));
