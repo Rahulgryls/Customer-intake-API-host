@@ -10,7 +10,9 @@ const { customers, siebelIndex, riskProfiles, transactions, exitedCustomer, sanc
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const API_KEYS = (process.env.API_KEYS || "demo-key-123").split(",").map(k => k.trim());
+// BASIC_AUTH_USERS format: "user1:pass1,user2:pass2" - each consuming app gets its own pair
+const CREDENTIALS = (process.env.BASIC_AUTH_USERS || "demo:demo123")
+  .split(",").map(pair => pair.trim().split(":")).filter(p => p.length === 2);
 
 app.use(helmet());
 app.use(cors());
@@ -34,12 +36,20 @@ function messageHeader(req, sourceSystem) {
   };
 }
 
-// --- API key auth (skip for /docs, /openapi.json, /health) ---
+// --- HTTP Basic Auth (username/password) - skip for /docs, /openapi.json, /health ---
 app.use((req, res, next) => {
   if (req.path.startsWith("/docs") || req.path === "/openapi.json" || req.path === "/health") return next();
-  const key = req.header("X-API-Key");
-  if (!key || !API_KEYS.includes(key)) {
-    return res.status(401).json(errorBody(req, 401, "AUTH-1401", "Unauthorized", "Missing or invalid X-API-Key header", "header.X-API-Key"));
+
+  const header = req.header("Authorization") || "";
+  const [scheme, encoded] = header.split(" ");
+  let user, pass;
+  if (scheme === "Basic" && encoded) {
+    try { [user, pass] = Buffer.from(encoded, "base64").toString("utf8").split(":"); } catch { /* fall through */ }
+  }
+  const ok = CREDENTIALS.some(([u, p]) => u === user && p === pass);
+  if (!ok) {
+    res.set("WWW-Authenticate", 'Basic realm="Customer Intake API"');
+    return res.status(401).json(errorBody(req, 401, "AUTH-1401", "Unauthorized", "Missing or invalid username/password (HTTP Basic Auth required)", "header.Authorization"));
   }
   next();
 });

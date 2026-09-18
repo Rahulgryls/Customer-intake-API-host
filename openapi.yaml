@@ -4,18 +4,17 @@ info:
   description: >
     Mock host for Credit Report Application — Stage 1 Customer Intake APIs:
     Customer Details (Siebel CRM), Risk Profile (Risk Engine), Transaction History (Payments Hub).
-    All data is fictitious. Requires header X-API-Key.
+    All data is fictitious. Requires HTTP Basic Auth (username/password).
   version: "1.0.0"
 servers:
   - url: /
 security:
-  - ApiKeyAuth: []
+  - BasicAuth: []
 components:
   securitySchemes:
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: X-API-Key
+    BasicAuth:
+      type: http
+      scheme: basic
   schemas:
     Money:
       type: object
