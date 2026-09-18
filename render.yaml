@@ -6,7 +6,7 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
-      - key: API_KEYS
+      - key: BASIC_AUTH_USERS
         sync: false
       - key: NODE_VERSION
         value: 20
