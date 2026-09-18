@@ -4,10 +4,13 @@
 // Custom categories are created at runtime through the admin portal's "Manage APIs"
 // tab, for POC/stubbing purposes - each gets its own folder under data/files/<slug>/
 // and is served generically (no business logic, just stored JSON).
-// NOTE: on free hosting the filesystem is ephemeral - everything here (built-in data
-// AND any custom APIs/files you create) survives normal operation and restarts on the
-// same instance, but a fresh deploy (git push) reseeds/clears unless a persistent
-// volume or real DB is added. Download anything you want to keep before redeploying.
+//
+// Local disk here is fast but ephemeral on free hosting (wiped on every redeploy).
+// If GITHUB_TOKEN/GITHUB_REPO are configured (see data/github.js), server.js registers
+// a change listener via setChangeListener() that mirrors every write/delete to GitHub
+// in the background, and restoreFromSnapshot() rehydrates this disk from GitHub on
+// startup - so this module stays pure local-disk logic, and persistence is layered on
+// top rather than baked in.
 const fs = require("fs");
 const path = require("path");
 const defaults = require("./mockData");
@@ -40,7 +43,13 @@ function loadRegistry() {
   if (!fs.existsSync(REGISTRY_PATH)) return [];
   try { return JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf8")); } catch { return []; }
 }
-function saveRegistry(reg) { fs.writeFileSync(REGISTRY_PATH, JSON.stringify(reg, null, 2)); }
+function saveRegistry(reg) {
+  fs.mkdirSync(path.dirname(REGISTRY_PATH), { recursive: true });
+  fs.writeFileSync(REGISTRY_PATH, JSON.stringify(reg, null, 2));
+}
+function registryRaw() {
+  return fs.existsSync(REGISTRY_PATH) ? fs.readFileSync(REGISTRY_PATH, "utf8") : "[]";
+}
 
 function customCategories() { return loadRegistry().map(a => a.slug); }
 function allCategories() { return [...BUILTIN_CATEGORIES, ...customCategories()]; }
@@ -59,7 +68,47 @@ function ensureSeeded() {
   }
   for (const slug of customCategories()) fs.mkdirSync(dirFor(slug), { recursive: true });
 }
-ensureSeeded();
+
+// --- change notifications (for background GitHub sync - see server.js bootstrap) ---
+let changeListener = null;
+function setChangeListener(fn) { changeListener = fn; }
+function notifyFileChange(category, id, content) {
+  // content === null means "deleted"
+  if (changeListener) {
+    try { changeListener({ type: "file", category, id, content }); }
+    catch (e) { console.error("[dataStore] change listener error:", e.message); }
+  }
+}
+function notifyRegistryChange() {
+  if (changeListener) {
+    try { changeListener({ type: "registry" }); }
+    catch (e) { console.error("[dataStore] change listener error:", e.message); }
+  }
+}
+
+// --- restoring from a GitHub snapshot on startup (bypasses writeFile - this data came
+// FROM GitHub, so re-committing it back would be redundant) ---
+function restoreFromSnapshot(entries) {
+  let restored = 0;
+  for (const { repoPath, content } of entries || []) {
+    const rel = repoPath.replace(/^data\/committed\//, "");
+    if (rel === "_registry/apiRegistry.json") {
+      fs.mkdirSync(path.dirname(REGISTRY_PATH), { recursive: true });
+      fs.writeFileSync(REGISTRY_PATH, content);
+      restored++;
+      continue;
+    }
+    const m = rel.match(/^([^/]+)\/(.+)\.json$/);
+    if (!m) continue;
+    const [, category, id] = m;
+    try {
+      fs.mkdirSync(dirFor(category), { recursive: true });
+      fs.writeFileSync(path.join(dirFor(category), id + ".json"), content);
+      restored++;
+    } catch (e) { console.error(`[dataStore] failed to restore ${repoPath}:`, e.message); }
+  }
+  return restored;
+}
 
 function loadAll(category) {
   const dir = dirFor(category);
@@ -91,12 +140,14 @@ function writeFile(category, id, jsonValue) {
   validateId(id);
   fs.mkdirSync(dirFor(category), { recursive: true });
   fs.writeFileSync(path.join(dirFor(category), id + ".json"), JSON.stringify(jsonValue, null, 2));
+  notifyFileChange(category, id, jsonValue);
 }
 
 function deleteFile(category, id) {
   validateId(id);
   const p = path.join(dirFor(category), id + ".json");
   if (fs.existsSync(p)) fs.unlinkSync(p);
+  notifyFileChange(category, id, null);
 }
 
 function renameFile(category, oldId, newId) {
@@ -106,7 +157,9 @@ function renameFile(category, oldId, newId) {
   if (!fs.existsSync(oldPath)) throw new ApiError(404, `${category}/${oldId}.json not found`);
   const newPath = path.join(dirFor(category), newId + ".json");
   if (fs.existsSync(newPath)) throw new ApiError(409, `${category}/${newId}.json already exists`);
-  fs.renameSync(oldPath, newPath);
+  const content = JSON.parse(fs.readFileSync(oldPath, "utf8"));
+  writeFile(category, newId, content); // triggers sync for the new id
+  deleteFile(category, oldId);         // triggers sync removal of the old id
 }
 
 // --- API registry: custom mock APIs created via the admin portal ---
@@ -149,6 +202,7 @@ function createApi({ name, description, team, contact, tags, sampleResponse, sam
   };
   reg.push(entry);
   saveRegistry(reg);
+  notifyRegistryChange();
   fs.mkdirSync(dirFor(slug), { recursive: true });
   if (entry.sampleResponse) writeFile(slug, "sample", entry.sampleResponse);
   return entry;
@@ -161,6 +215,7 @@ function deleteApi(slug) {
   if (idx === -1) return false;
   reg.splice(idx, 1);
   saveRegistry(reg);
+  notifyRegistryChange();
   const dir = dirFor(slug);
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
   return true;
@@ -179,5 +234,6 @@ module.exports = {
   },
   listFiles, readFileRaw, writeFile, deleteFile, renameFile,
   listApis, createApi, deleteApi,
+  ensureSeeded, setChangeListener, restoreFromSnapshot, registryRaw,
   ApiError
 };

@@ -213,20 +213,20 @@ app.post("/admin/api/files/:category/:id/rename", (req, res) => {
   }
 });
 
-// --- Commit a file to GitHub (explicit, one file at a time - NOT automatic persistence) ---
-// Writes into data/committed/<category>/<id>.json in the repo, via the GitHub Contents API,
-// using Node's built-in fetch. Requires GITHUB_TOKEN (repo write access) and GITHUB_REPO
-// ("owner/repo") env vars; without them this endpoint returns 501 and everything else in the
-// app keeps working normally - this is an opt-in convenience, not a requirement.
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const GITHUB_REPO = process.env.GITHUB_REPO;
-const GITHUB_BRANCH = process.env.GITHUB_BRANCH || "main";
+// --- GitHub persistence ---
+// When GITHUB_TOKEN + GITHUB_REPO are configured (see data/github.js), every write/delete
+// below is mirrored into data/committed/{category}/{id}.json in the repo automatically in
+// the background (see the change listener registered in bootstrap() at the bottom of this
+// file), and the whole dataset is restored from GitHub on startup before the app starts
+// serving traffic. This endpoint is a manual "sync this one file again right now" button -
+// useful if you suspect a background sync failed - not the primary persistence mechanism.
+const github = require("./data/github");
 
 app.post("/admin/api/files/:category/:id/commit", async (req, res) => {
   const category = validCategory(req, res);
   if (!category) return;
-  if (!GITHUB_TOKEN || !GITHUB_REPO) {
-    return res.status(501).json(errorBody(req, 501, "ADM-GH-501", "GitHub commit not configured",
+  if (!github.isConfigured()) {
+    return res.status(501).json(errorBody(req, 501, "ADM-GH-501", "GitHub persistence not configured",
       "Set GITHUB_TOKEN and GITHUB_REPO environment variables on the server to enable this", "env"));
   }
   const raw = store.readFileRaw(category, req.params.id);
@@ -234,34 +234,11 @@ app.post("/admin/api/files/:category/:id/commit", async (req, res) => {
     return res.status(404).json(errorBody(req, 404, "ADM-0404", "File not found", `${category}/${req.params.id}.json does not exist`, "path"));
   }
   const repoPath = `data/committed/${category}/${req.params.id}.json`;
-  const ghHeaders = { Authorization: `token ${GITHUB_TOKEN}`, Accept: "application/vnd.github+json", "User-Agent": "customer-intake-api-admin" };
-  try {
-    const apiBase = `https://api.github.com/repos/${GITHUB_REPO}/contents/${repoPath}`;
-    let sha;
-    const existing = await fetch(`${apiBase}?ref=${encodeURIComponent(GITHUB_BRANCH)}`, { headers: ghHeaders });
-    if (existing.status === 200) sha = (await existing.json()).sha;
-    else if (existing.status !== 404) {
-      const t = await existing.text();
-      return res.status(502).json(errorBody(req, 502, "ADM-GH-502", "GitHub lookup failed", t.slice(0, 300), "github"));
-    }
-    const put = await fetch(apiBase, {
-      method: "PUT", headers: { ...ghHeaders, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: `Admin portal: commit ${category}/${req.params.id}.json`,
-        content: Buffer.from(raw, "utf8").toString("base64"),
-        branch: GITHUB_BRANCH,
-        ...(sha ? { sha } : {})
-      })
-    });
-    if (!put.ok) {
-      const t = await put.text();
-      return res.status(502).json(errorBody(req, 502, "ADM-GH-502", "GitHub commit failed", t.slice(0, 300), "github"));
-    }
-    const result = await put.json();
-    res.json({ status: "ok", path: repoPath, htmlUrl: result.content && result.content.html_url });
-  } catch (e) {
-    res.status(502).json(errorBody(req, 502, "ADM-GH-502", "GitHub commit failed", e.message, "github"));
+  const result = await github.putFile(repoPath, raw, `Admin portal: manual re-sync of ${category}/${req.params.id}.json`);
+  if (!result.ok) {
+    return res.status(502).json(errorBody(req, 502, "ADM-GH-502", "GitHub sync failed", result.error, "github"));
   }
+  res.json({ status: "ok", path: repoPath, htmlUrl: result.htmlUrl });
 });
 
 // --- Admin: API registry (create/list/delete custom mock APIs) ---
@@ -432,4 +409,34 @@ app.use("/docs", swaggerUi.serve, swaggerUi.setup(null, { swaggerUrl: "/openapi.
 // --- 404 fallback ---
 app.use((req, res) => res.status(404).json(errorBody(req, 404, "GEN-0404", "Not found", "No matching route", "path")));
 
-app.listen(PORT, () => console.log(`Customer Intake API listening on :${PORT} | docs at /docs`));
+// --- Startup: rehydrate from GitHub (if configured) before seeding/serving, then wire
+// up the background sync listener for everything that happens after that ---
+async function bootstrap() {
+  if (github.isConfigured()) {
+    console.log("[bootstrap] GitHub persistence configured — restoring data/committed/ ...");
+    const entries = await github.fetchSnapshot("data/committed/");
+    const restored = store.restoreFromSnapshot(entries);
+    console.log(`[bootstrap] restored ${restored} file(s) from GitHub`);
+  } else {
+    console.log("[bootstrap] GitHub persistence not configured — using local disk only (resets on redeploy)");
+  }
+  store.ensureSeeded();
+
+  store.setChangeListener(async (event) => {
+    if (!github.isConfigured()) return;
+    if (event.type === "file") {
+      const repoPath = `data/committed/${event.category}/${event.id}.json`;
+      const result = event.content === null
+        ? await github.deleteFile(repoPath, `Admin portal: delete ${event.category}/${event.id}.json`)
+        : await github.putFile(repoPath, JSON.stringify(event.content, null, 2), `Admin portal: update ${event.category}/${event.id}.json`);
+      if (!result.ok) console.error(`[sync] background GitHub sync failed for ${repoPath}:`, result.error);
+    } else if (event.type === "registry") {
+      const result = await github.putFile("data/committed/_registry/apiRegistry.json", store.registryRaw(), "Admin portal: update API registry");
+      if (!result.ok) console.error("[sync] background GitHub sync failed for API registry:", result.error);
+    }
+  });
+
+  app.listen(PORT, () => console.log(`Customer Intake API listening on :${PORT} | docs at /docs`));
+}
+
+bootstrap();

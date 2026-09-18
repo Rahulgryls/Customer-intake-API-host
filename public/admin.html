@@ -107,8 +107,8 @@
     Risk Profile, Transaction History). It <em>can</em> simulate error responses though: add a top-level
     <code>"__status": 422</code> field to any stored record (in the Manage Data editor) to make that record's
     GET reply with that HTTP status instead of 200 — handy for testing a consuming app's error handling.
-    Everything created here lives on this server's local disk, same as the rest of this app's data — it survives
-    restarts but resets on a fresh deploy, so treat it as POC/demo storage, not production data.
+    When GitHub persistence is configured on this server, everything here is automatically mirrored to GitHub
+    in the background and restored on every startup — otherwise it's local-disk only and resets on redeploy.
   </div>
 
   <div class="create-card">
@@ -182,7 +182,7 @@
         <input type="file" id="fileInput" accept=".json,application/json" style="display:none">
         <button class="btn secondary" id="downloadBtn" disabled>Download</button>
         <button class="btn secondary" id="renameBtn" disabled title="Rename this file's ID">Rename</button>
-        <button class="btn secondary" id="commitBtn" disabled title="Commit this file to the GitHub repo (data/committed/)">Commit to GitHub</button>
+        <button class="btn secondary" id="commitBtn" disabled title="Force an immediate re-sync of this file to GitHub (normally happens automatically in the background)">Re-sync to GitHub</button>
         <button class="btn" id="saveBtn" disabled>Save</button>
         <button class="btn danger" id="deleteBtn" disabled>Delete</button>
       </div>
@@ -488,15 +488,15 @@ $("#renameBtn").onclick = async () => {
 
 $("#commitBtn").onclick = async () => {
   if (!currentCategory || !currentId) return;
-  setStatus(`Committing ${currentId} to GitHub...`, null);
+  setStatus(`Re-syncing ${currentId} to GitHub...`, null);
   const res = await fetch(`/admin/api/files/${currentCategory}/${encodeURIComponent(currentId)}/commit`, { method: "POST" });
   const data = await res.json();
   if (res.ok) {
-    setStatus(`Committed to GitHub: ${data.path}${data.htmlUrl ? " — " + data.htmlUrl : ""}`, true);
+    setStatus(`Synced to GitHub: ${data.path}${data.htmlUrl ? " — " + data.htmlUrl : ""}`, true);
   } else if (res.status === 501) {
-    setStatus("GitHub commit isn't configured on this server (needs GITHUB_TOKEN + GITHUB_REPO env vars)", false);
+    setStatus("GitHub persistence isn't configured on this server (needs GITHUB_TOKEN + GITHUB_REPO env vars)", false);
   } else {
-    setStatus(data.errors ? data.errors[0].detail : "Commit failed", false);
+    setStatus(data.errors ? data.errors[0].detail : "Sync failed", false);
   }
 };
 

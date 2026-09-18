@@ -59,22 +59,38 @@ lives on this server's local disk — same as the rest of this app's data. It su
 resets on a fresh deploy (git push) unless a persistent volume or real database is added. Treat it as
 POC/demo storage: download anything you want to keep before redeploying.
 
-## File rename & "Commit to GitHub" (Manage Data tab)
-- **Rename** — change a file's ID in place (e.g. turn `sample.json` into something meaningful like
-  `1012ab-15.json`) without re-uploading or losing edits.
-- **Commit to GitHub** — writes the currently-open file into this repo at `data/committed/{category}/{id}.json`
-  via the GitHub API, so that one file survives a redeploy (everything else in `data/files/` still resets, as
-  described above — this button snapshots one file at a time on purpose, it isn't automatic persistence).
-  Requires two environment variables on the server:
-  - `GITHUB_TOKEN` — a GitHub personal access token with **contents: write** access to this repo only
-    (a fine-grained PAT scoped to just this repository is safest).
-  - `GITHUB_REPO` — `owner/repo`, e.g. `Rahulgryls/Customer-intake-API-host`.
-  - `GITHUB_BRANCH` (optional, defaults to `main`).
+## Persistence: GitHub as the durable backing store
+By default, everything (built-in seed data, custom APIs, uploaded files) lives on the server's local disk,
+which is fast but **ephemeral** - it resets to seed data on every redeploy. Setting these three environment
+variables turns on automatic GitHub-backed persistence instead:
+- `GITHUB_TOKEN` — a GitHub personal access token with **contents: write** access to this repo only
+  (a fine-grained PAT scoped to just this repository is safest).
+- `GITHUB_REPO` — `owner/repo`, e.g. `Rahulgryls/Customer-intake-API-host`.
+- `GITHUB_BRANCH` (optional, defaults to `main`).
 
-  Without these set, the button just replies that GitHub commit isn't configured — nothing else in the app
-  is affected. **Security note:** once configured, anyone with the admin Basic Auth credential can trigger a
-  real commit to this GitHub repo (scoped only to the `data/committed/` folder, never your app code) — treat
-  that credential as more sensitive once this is turned on, and rotate it periodically.
+Once configured: every save, delete, rename, API creation and API deletion is automatically mirrored in the
+background into this repo under `data/committed/{category}/{id}.json` (and the API registry at
+`data/committed/_registry/apiRegistry.json`) - no button to click, it just happens. On every server startup,
+the app pulls everything back down from `data/committed/` in GitHub **before** it starts serving traffic, so
+a redeploy no longer means lost data. Without these env vars set, the app behaves exactly as before (local
+disk only, resets on redeploy) - nothing else changes.
+
+**Rename** (Manage Data tab) — change a file's ID in place (e.g. turn `sample.json` into something meaningful
+like `1012ab-15.json`) without re-uploading or losing edits; this is treated as a write+delete, so it syncs to
+GitHub automatically too when persistence is on.
+
+**Re-sync to GitHub** (Manage Data tab) — a manual button to force one file to sync again right now, useful
+if you suspect a background sync failed (check the server logs for `[sync] background GitHub sync failed...`
+lines) - not the primary mechanism, since syncing is automatic once configured.
+
+**Security note:** once GitHub persistence is configured, the token is core to how the app stays durable, and
+anyone with a valid admin Basic Auth credential can trigger commits to this repo (scoped only to the
+`data/committed/` folder, never your app code). Treat every admin credential as more sensitive once this is
+on, and rotate the token periodically.
+
+**Trade-offs to know about:** each save now does a network round-trip to GitHub in the background (a second
+or two, not blocking the caller's response); the repo's commit history grows with every edit anyone makes;
+GitHub's API allows 5,000 requests/hour per token, which is generous for a small team but not unlimited.
 
 ## Multiple people using the admin portal
 Give each teammate their own entry in `BASIC_AUTH_USERS` (e.g. `demo:demo123,alex:alexpass456`) instead of
