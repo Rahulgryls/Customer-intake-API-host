@@ -1,0 +1,19 @@
+{
+  "name": "customer-intake-api",
+  "version": "1.0.0",
+  "description": "Mock Customer Intake API suite (Customer Details, Risk Profile, Transaction History) with Swagger docs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.4.0",
+    "swagger-ui-express": "^5.0.1",
+    "yamljs": "^0.3.0",
+    "dotenv": "^16.4.5"
+  }
+}
