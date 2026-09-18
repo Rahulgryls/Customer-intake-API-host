@@ -193,8 +193,8 @@ app.get("/admin/api/apis", (req, res) => {
 
 app.post("/admin/api/apis", (req, res) => {
   try {
-    const { name, description, sampleResponse } = req.body || {};
-    const entry = store.createApi({ name, description, sampleResponse });
+    const { name, description, team, contact, tags, sampleResponse, sampleRequest } = req.body || {};
+    const entry = store.createApi({ name, description, team, contact, tags, sampleResponse, sampleRequest });
     res.status(201).json({ ...entry, endpoint: `/customer-intake/v1/mock/${entry.slug}` });
   } catch (e) {
     if (e instanceof store.ApiError) {
@@ -229,9 +229,23 @@ function customApiOr404(req, res) {
   return true;
 }
 
+// Reserved key: a stored stub record may include a top-level "__status" field
+// (e.g. "__status": 422) to make GET-by-id for that record return that HTTP
+// status instead of 200 - lets teams simulate error paths, not just happy-path
+// 200s. Stripped out of the response body; the status code drives res.status().
+function splitStubStatus(record) {
+  if (!record || typeof record !== "object" || Array.isArray(record)) return { status: 200, body: record };
+  const { __status, ...body } = record;
+  const status = Number.isInteger(__status) && __status >= 100 && __status <= 599 ? __status : 200;
+  return { status, body };
+}
+
 app.get("/customer-intake/v1/mock/:apiSlug", (req, res) => {
   if (!customApiOr404(req, res)) return;
-  const records = store.listFiles(req.params.apiSlug).map(f => JSON.parse(store.readFileRaw(f.category, f.id)));
+  const records = store.listFiles(req.params.apiSlug).map(f => {
+    const { status, body } = splitStubStatus(JSON.parse(store.readFileRaw(f.category, f.id)));
+    return { id: f.id, statusCode: status, body };
+  });
   res.json({ messageHeader: messageHeader(req, "MOCK-STUB"), apiSlug: req.params.apiSlug, count: records.length, records });
 });
 
@@ -241,8 +255,8 @@ app.get("/customer-intake/v1/mock/:apiSlug/:id", (req, res) => {
   if (raw === null) {
     return res.status(404).json(errorBody(req, 404, "MOCK-0404", "Record not found", `No stub record ${req.params.id} for API ${req.params.apiSlug}`, "path.id"));
   }
-  res.set("Content-Type", "application/json");
-  res.send(raw);
+  const { status, body } = splitStubStatus(JSON.parse(raw));
+  res.status(status).json(body);
 });
 
 app.put("/customer-intake/v1/mock/:apiSlug/:id", (req, res) => {
@@ -279,29 +293,39 @@ function inferSchema(value) {
   }
 }
 
+const STUB_STATUS_TIP = 'Tip: any stored record may include a top-level "__status" field ' +
+  '(e.g. "__status": 422) to make GET-by-id return that HTTP status instead of 200 — ' +
+  "simulate error paths, not just happy-path responses.";
+
 function buildOpenApiDoc() {
   const doc = JSON.parse(JSON.stringify(baseOpenapiDoc));
   doc.paths = doc.paths || {};
   for (const api of store.listApis()) {
-    const schema = inferSchema(api.sampleResponse || { note: "no sample provided at creation time" });
+    const responseSchema = inferSchema(api.sampleResponse || { note: "no sample provided at creation time" });
+    const requestSchema = inferSchema(api.sampleRequest || api.sampleResponse || { note: "no sample provided at creation time" });
+    const owner = [api.team, api.contact].filter(Boolean).join(" — ");
+    const tagLine = api.tags && api.tags.length ? `Tags: ${api.tags.join(", ")}.` : "";
+    const fullDescription = [api.description, owner && `Owned by: ${owner}.`, tagLine, STUB_STATUS_TIP].filter(Boolean).join(" ");
     const base = `/customer-intake/v1/mock/${api.slug}`;
     doc.paths[base] = {
       get: {
         summary: `List ${api.displayName} mock records`, tags: ["Custom Mock APIs (stubs)"],
-        description: api.description || undefined,
-        responses: { 200: { description: "OK", content: { "application/json": { schema: { type: "object", properties: { count: { type: "integer" }, records: { type: "array", items: schema } } } } } } }
+        description: fullDescription,
+        responses: { 200: { description: "OK", content: { "application/json": { schema: { type: "object", properties: { count: { type: "integer" }, records: { type: "array", items: { type: "object", properties: { id: { type: "string" }, statusCode: { type: "integer" }, body: responseSchema } } } } } } } } }
       }
     };
     doc.paths[`${base}/{id}`] = {
       get: {
         summary: `Get one ${api.displayName} mock record`, tags: ["Custom Mock APIs (stubs)"],
+        description: fullDescription,
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-        responses: { 200: { description: "OK", content: { "application/json": { schema } } }, 404: { description: "Not found" } }
+        responses: { 200: { description: "OK (or whatever status the record's __status specifies)", content: { "application/json": { schema: responseSchema } } }, 404: { description: "Not found" } }
       },
       put: {
         summary: `Create/update a ${api.displayName} mock record`, tags: ["Custom Mock APIs (stubs)"],
+        description: fullDescription,
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-        requestBody: { required: true, content: { "application/json": { schema } } },
+        requestBody: { required: true, content: { "application/json": { schema: requestSchema } } },
         responses: { 200: { description: "Saved" } }
       },
       delete: {

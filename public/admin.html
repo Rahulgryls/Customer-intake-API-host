@@ -99,10 +99,13 @@
 <div class="page apis-page active" id="page-apis">
   <div class="apis-note">
     <strong>What this creates:</strong> a generic stub endpoint that stores and returns whatever JSON you give it —
-    useful for POC/simulation. It does <em>not</em> generate business rules (validation, status codes, filtering) —
-    those still need to be coded by hand, same as the three built-in APIs (Customer Details, Risk Profile,
-    Transaction History). Created APIs live on this server's local disk, same as everything else here — they
-    survive restarts but reset on a fresh deploy, so treat this as POC/demo storage, not production data.
+    useful for POC/simulation across teams. It does <em>not</em> generate business rules (query-param filtering,
+    custom validation) — those still need to be coded by hand, same as the three built-in APIs (Customer Details,
+    Risk Profile, Transaction History). It <em>can</em> simulate error responses though: add a top-level
+    <code>"__status": 422</code> field to any stored record (in the Manage Data editor) to make that record's
+    GET reply with that HTTP status instead of 200 — handy for testing a consuming app's error handling.
+    Everything created here lives on this server's local disk, same as the rest of this app's data — it survives
+    restarts but resets on a fresh deploy, so treat it as POC/demo storage, not production data.
   </div>
 
   <div class="create-card">
@@ -115,12 +118,30 @@
       <label>Description (optional)</label>
       <input type="text" id="apiDescription" placeholder="What does this API simulate?">
     </div>
+    <div class="form-row" style="flex-direction:row; gap:12px;">
+      <div style="flex:1">
+        <label style="display:block; margin-bottom:4px;">Team (optional)</label>
+        <input type="text" id="apiTeam" placeholder="e.g. Payments Squad" style="width:100%">
+      </div>
+      <div style="flex:1">
+        <label style="display:block; margin-bottom:4px;">Contact (optional)</label>
+        <input type="text" id="apiContact" placeholder="email or chat channel" style="width:100%">
+      </div>
+    </div>
+    <div class="form-row">
+      <label>Tags (optional, comma-separated — helps others find this API)</label>
+      <input type="text" id="apiTags" placeholder="e.g. fraud, credit, payments">
+    </div>
+    <div class="form-row">
+      <label>Sample request JSON (optional — what a caller's PUT body looks like; documented in Swagger)</label>
+      <textarea id="apiSampleRequest" placeholder='{"exampleField": "value"}' style="min-height:70px"></textarea>
+    </div>
     <div class="form-row">
       <label>Sample response JSON (optional — used to seed a first file and to document the shape in Swagger)</label>
       <textarea id="apiSample" placeholder='{"exampleField": "value"}'></textarea>
     </div>
     <div class="toolbar" style="margin-bottom:0">
-      <button class="btn secondary" id="uploadSampleBtn">Upload sample .json instead</button>
+      <button class="btn secondary" id="uploadSampleBtn">Upload sample response .json instead</button>
       <input type="file" id="sampleFileInput" accept=".json,application/json" style="display:none">
       <span style="flex:1"></span>
       <button class="btn" id="createApiBtn">Create API</button>
@@ -162,6 +183,7 @@
       </div>
       <div class="editor-wrap"><textarea id="editor"></textarea></div>
       <div class="status" id="status"></div>
+      <div class="builtin-tag" id="statusHint" style="margin-top:4px;"></div>
     </div>
   </div>
 </div>
@@ -183,6 +205,7 @@ document.querySelectorAll("nav.maintabs button").forEach(btn => {
 
 // ================= Manage APIs =================
 const apiNameEl = $("#apiName"), apiDescEl = $("#apiDescription"), apiSampleEl = $("#apiSample"),
+      apiTeamEl = $("#apiTeam"), apiContactEl = $("#apiContact"), apiTagsEl = $("#apiTags"), apiSampleRequestEl = $("#apiSampleRequest"),
       createStatusEl = $("#createStatus"), apisTableBody = $("#apisTableBody");
 
 function setCreateStatus(msg, ok) { createStatusEl.textContent = msg; createStatusEl.className = "create-status " + (ok === true ? "ok" : ok === false ? "err" : ""); }
@@ -205,8 +228,11 @@ function renderApisTable(apis, builtIn) {
     const tr = document.createElement("tr");
     const created = a.createdAt ? new Date(a.createdAt).toLocaleString() : "—";
     const files = a.fileCount === null ? "—" : a.fileCount;
+    const owner = [a.team, a.contact].filter(Boolean).join(" · ");
+    const tags = a.tags && a.tags.length ? a.tags.join(", ") : "";
+    const subLines = [a.description, owner, tags].filter(Boolean).map(l => `<div class="builtin-tag">${l}</div>`).join("");
     tr.innerHTML = `
-      <td>${a.displayName}${a.description ? `<div class="builtin-tag">${a.description}</div>` : ""}</td>
+      <td>${a.displayName}${subLines}</td>
       <td><code>${a.endpoint}</code></td>
       <td>${files}</td>
       <td>${created}</td>
@@ -245,14 +271,25 @@ $("#createApiBtn").onclick = async () => {
     try { sampleResponse = JSON.parse(raw); }
     catch (e) { return setCreateStatus("Sample response isn't valid JSON: " + e.message, false); }
   }
+  let sampleRequest = null;
+  const rawReq = apiSampleRequestEl.value.trim();
+  if (rawReq) {
+    try { sampleRequest = JSON.parse(rawReq); }
+    catch (e) { return setCreateStatus("Sample request isn't valid JSON: " + e.message, false); }
+  }
   const res = await fetch("/admin/api/apis", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, description: apiDescEl.value.trim(), sampleResponse })
+    body: JSON.stringify({
+      name, description: apiDescEl.value.trim(),
+      team: apiTeamEl.value.trim(), contact: apiContactEl.value.trim(), tags: apiTagsEl.value.trim(),
+      sampleResponse, sampleRequest
+    })
   });
   const data = await res.json();
   if (res.ok) {
     setCreateStatus(`Created "${data.displayName}" — endpoint: ${data.endpoint}`, true);
     apiNameEl.value = ""; apiDescEl.value = ""; apiSampleEl.value = "";
+    apiTeamEl.value = ""; apiContactEl.value = ""; apiTagsEl.value = ""; apiSampleRequestEl.value = "";
     await refreshApis();
   } else {
     setCreateStatus(data.errors ? data.errors[0].detail : "Failed to create API", false);
@@ -268,7 +305,13 @@ let filesByCategory = {};
 let collapsed = {};
 
 const treeEl = $("#tree"), statusEl = $("#status"), countsEl = $("#counts"), currentFileEl = $("#currentFile");
-const saveBtn = $("#saveBtn"), deleteBtn = $("#deleteBtn"), downloadBtn = $("#downloadBtn"), targetFolderEl = $("#targetFolder");
+const saveBtn = $("#saveBtn"), deleteBtn = $("#deleteBtn"), downloadBtn = $("#downloadBtn"), targetFolderEl = $("#targetFolder"), statusHintEl = $("#statusHint");
+
+function updateStatusHint(category) {
+  statusHintEl.textContent = (category && !BUILTIN_LABEL.hasOwnProperty(category))
+    ? 'Tip: add a top-level "__status": 404 (or 422, 500, ...) field to this record to make its GET reply with that status instead of 200 — useful for testing error handling.'
+    : "";
+}
 
 const cm = CodeMirror.fromTextArea(document.getElementById("editor"), {
   mode: "application/json", theme: "material-darker", lineNumbers: true,
@@ -354,6 +397,7 @@ async function openFile(category, id) {
   currentFileEl.textContent = `${category}/${id}.json`;
   saveBtn.disabled = false; deleteBtn.disabled = false; downloadBtn.disabled = false;
   setStatus("Loaded " + id, null);
+  updateStatusHint(category);
   renderTree();
 }
 
@@ -375,6 +419,7 @@ $("#newBtn").onclick = () => {
   currentFileEl.textContent = `${category}/${id}.json (new, unsaved)`;
   saveBtn.disabled = false; deleteBtn.disabled = true; downloadBtn.disabled = true;
   setStatus(`New file template ready in "${folderLabels[category] || category}" — edit then Save`, null);
+  updateStatusHint(category);
 };
 
 $("#saveBtn").onclick = async () => {
@@ -421,6 +466,7 @@ $("#fileInput").onchange = async (e) => {
   currentFileEl.textContent = `${category}/${id}.json (uploaded, unsaved — click Save to confirm)`;
   saveBtn.disabled = false; downloadBtn.disabled = true;
   setStatus(`Loaded upload "${file.name}" into "${folderLabels[category] || category}" as ID "${id}" — review and click Save to write it`, null);
+  updateStatusHint(category);
   e.target.value = "";
 };
 

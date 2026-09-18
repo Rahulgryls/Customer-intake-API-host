@@ -96,7 +96,13 @@ function slugify(name) {
 
 function listApis() { return loadRegistry(); }
 
-function createApi({ name, description, sampleResponse }) {
+function parseTags(tags) {
+  if (Array.isArray(tags)) return tags.map(t => String(t).trim()).filter(Boolean).slice(0, 10);
+  if (typeof tags === "string") return tags.split(",").map(t => t.trim()).filter(Boolean).slice(0, 10);
+  return [];
+}
+
+function createApi({ name, description, team, contact, tags, sampleResponse, sampleRequest }) {
   const slug = slugify(name);
   if (!slug || slug.length < 2) throw new ApiError(400, "Provide a valid API name (letters/numbers, at least 2 characters)");
   if (RESERVED_SLUGS.has(slug)) throw new ApiError(400, `"${slug}" is a reserved name — choose another`);
@@ -105,12 +111,19 @@ function createApi({ name, description, sampleResponse }) {
   if (sampleResponse !== undefined && sampleResponse !== null && typeof sampleResponse !== "object") {
     throw new ApiError(400, "Sample response, if provided, must be a JSON object or array");
   }
+  if (sampleRequest !== undefined && sampleRequest !== null && typeof sampleRequest !== "object") {
+    throw new ApiError(400, "Sample request, if provided, must be a JSON object or array");
+  }
   const entry = {
     slug,
     displayName: String(name).trim(),
     description: description ? String(description).trim() : "",
+    team: team ? String(team).trim() : "",
+    contact: contact ? String(contact).trim() : "",
+    tags: parseTags(tags),
     createdAt: new Date().toISOString(),
-    sampleResponse: sampleResponse ?? null
+    sampleResponse: sampleResponse ?? null,
+    sampleRequest: sampleRequest ?? null
   };
   reg.push(entry);
   saveRegistry(reg);
