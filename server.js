@@ -11,9 +11,17 @@ const { exitedCustomer, sanctionsBlockedCustomer, prospectNoRatingCustomer } = r
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-// BASIC_AUTH_USERS format: "user1:pass1,user2:pass2" - each consuming app gets its own pair
+// BASIC_AUTH_USERS format: "user1:pass1,user2:pass2" - give each person/team their own pair
+// so "who created this API" means something real, not just a shared secret everyone types.
 const CREDENTIALS = (process.env.BASIC_AUTH_USERS || "demo:demo123")
   .split(",").map(pair => pair.trim().split(":")).filter(p => p.length === 2);
+
+// ADMIN_USERS: usernames (from the list above) allowed to manage/delete ANY custom API,
+// not just their own. Defaults to just the first username if unset, so by default only
+// the primary account is an admin and everyone else can only manage what they created.
+const ADMIN_USERS = (process.env.ADMIN_USERS || (CREDENTIALS[0] ? CREDENTIALS[0][0] : ""))
+  .split(",").map(u => u.trim()).filter(Boolean);
+function isAdmin(username) { return ADMIN_USERS.includes(username); }
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -59,15 +67,20 @@ app.use((req, res, next) => {
   if (scheme === "Basic" && encoded) {
     try { [user, pass] = Buffer.from(encoded, "base64").toString("utf8").split(":"); } catch { /* fall through */ }
   }
-  const ok = CREDENTIALS.some(([u, p]) => u === user && p === pass);
-  if (!ok) {
+  const match = CREDENTIALS.find(([u, p]) => u === user && p === pass);
+  if (!match) {
     res.set("WWW-Authenticate", 'Basic realm="Customer Intake API"');
     return res.status(401).json(errorBody(req, 401, "AUTH-1401", "Unauthorized", "Missing or invalid username/password (HTTP Basic Auth required)", "header.Authorization"));
   }
+  req.user = match[0];
   next();
 });
 
 app.get("/health", (req, res) => res.json({ status: "UP", timestamp: new Date().toISOString() }));
+
+// Lets the admin portal show "you" and whether you have admin rights, without exposing
+// anyone else's credentials.
+app.get("/admin/api/whoami", (req, res) => res.json({ username: req.user, isAdmin: isAdmin(req.user) }));
 
 // --- API-01: Fetch Customer Details ---
 app.get("/customer-intake/v1/customers/:id", (req, res) => {
@@ -264,7 +277,7 @@ app.get("/admin/api/apis", (req, res) => {
 app.post("/admin/api/apis", (req, res) => {
   try {
     const { name, description, team, contact, tags, sampleResponse, sampleRequest } = req.body || {};
-    const entry = store.createApi({ name, description, team, contact, tags, sampleResponse, sampleRequest });
+    const entry = store.createApi({ name, description, team, contact, tags, sampleResponse, sampleRequest, createdBy: req.user });
     res.status(201).json({ ...entry, endpoint: `/customer-intake/v1/mock/${entry.slug}` });
   } catch (e) {
     if (e instanceof store.ApiError) {
@@ -276,6 +289,11 @@ app.post("/admin/api/apis", (req, res) => {
 
 app.delete("/admin/api/apis/:slug", (req, res) => {
   try {
+    const entry = store.listApis().find(a => a.slug === req.params.slug);
+    if (entry && entry.createdBy && entry.createdBy !== req.user && !isAdmin(req.user)) {
+      return res.status(403).json(errorBody(req, 403, "ADM-API-403", "Not allowed",
+        `Only "${entry.createdBy}" (who created this API) or an admin can delete it`, "path.slug"));
+    }
     const ok = store.deleteApi(req.params.slug);
     if (!ok) return res.status(404).json(errorBody(req, 404, "ADM-API-404", "API not found", `No custom API named ${req.params.slug}`, "path.slug"));
     res.json({ status: "ok", slug: req.params.slug });

@@ -88,7 +88,10 @@
     <h1>Customer Intake API — Admin Portal</h1>
     <div class="sub">Create mock APIs for stubbing, then browse and edit the JSON files behind every API</div>
   </div>
-  <div class="sub" id="counts"></div>
+  <div style="text-align:right">
+    <div class="sub" id="whoamiLine"></div>
+    <div class="sub" id="counts"></div>
+  </div>
 </header>
 <nav class="maintabs">
   <button data-page="apis" class="active">Manage APIs</button>
@@ -210,9 +213,17 @@ const apiNameEl = $("#apiName"), apiDescEl = $("#apiDescription"), apiSampleEl =
       apiTeamEl = $("#apiTeam"), apiContactEl = $("#apiContact"), apiTagsEl = $("#apiTags"), apiSampleRequestEl = $("#apiSampleRequest"),
       createStatusEl = $("#createStatus"), apisTableBody = $("#apisTableBody");
 
+let whoami = { username: null, isAdmin: false };
+async function loadWhoami() {
+  const res = await fetch("/admin/api/whoami");
+  if (res.ok) whoami = await res.json();
+}
+
 function setCreateStatus(msg, ok) { createStatusEl.textContent = msg; createStatusEl.className = "create-status " + (ok === true ? "ok" : ok === false ? "err" : ""); }
 
 async function refreshApis() {
+  if (!whoami.username) await loadWhoami();
+  $("#whoamiLine").textContent = `Signed in as ${whoami.username}${whoami.isAdmin ? " (admin)" : ""}`;
   const res = await fetch("/admin/api/apis");
   if (!res.ok) return;
   const data = await res.json();
@@ -232,14 +243,19 @@ function renderApisTable(apis, builtIn) {
     const files = a.fileCount === null ? "—" : a.fileCount;
     const owner = [a.team, a.contact].filter(Boolean).join(" · ");
     const tags = a.tags && a.tags.length ? a.tags.join(", ") : "";
-    const subLines = [a.description, owner, tags].filter(Boolean).map(l => `<div class="builtin-tag">${l}</div>`).join("");
+    const createdByLine = a.createdBy && a.createdBy !== "unknown" ? `Created by: ${a.createdBy}` : "";
+    const subLines = [a.description, owner, tags, createdByLine].filter(Boolean).map(l => `<div class="builtin-tag">${l}</div>`).join("");
+    const canDelete = !a.builtin && (whoami.isAdmin || a.createdBy === whoami.username);
+    const deleteCell = a.builtin ? "" : canDelete
+      ? `<button class="btn danger delApiBtn" data-slug="${a.slug}">Delete</button>`
+      : `<button class="btn danger" disabled title="Only ${a.createdBy || "the creator"} or an admin can delete this">Delete</button>`;
     tr.innerHTML = `
       <td>${a.displayName}${subLines}</td>
       <td><code>${a.endpoint}</code></td>
       <td>${files}</td>
       <td>${created}</td>
       <td>${a.builtin ? '<span class="builtin-tag">built-in</span>' : '<span class="builtin-tag">custom / mock</span>'}</td>
-      <td>${a.builtin ? "" : `<button class="btn danger delApiBtn" data-slug="${a.slug}">Delete</button>`}</td>
+      <td>${deleteCell}</td>
     `;
     apisTableBody.appendChild(tr);
   });

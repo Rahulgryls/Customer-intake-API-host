@@ -123,7 +123,7 @@ function parseTags(tags) {
   return [];
 }
 
-function createApi({ name, description, team, contact, tags, sampleResponse, sampleRequest }) {
+function createApi({ name, description, team, contact, tags, sampleResponse, sampleRequest, createdBy }) {
   const slug = slugify(name);
   if (!slug || slug.length < 2) throw new ApiError(400, "Provide a valid API name (letters/numbers, at least 2 characters)");
   if (RESERVED_SLUGS.has(slug)) throw new ApiError(400, `"${slug}" is a reserved name — choose another`);
@@ -142,6 +142,7 @@ function createApi({ name, description, team, contact, tags, sampleResponse, sam
     team: team ? String(team).trim() : "",
     contact: contact ? String(contact).trim() : "",
     tags: parseTags(tags),
+    createdBy: createdBy || "unknown",
     createdAt: new Date().toISOString(),
     sampleResponse: sampleResponse ?? null,
     sampleRequest: sampleRequest ?? null

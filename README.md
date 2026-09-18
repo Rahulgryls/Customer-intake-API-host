@@ -75,3 +75,13 @@ POC/demo storage: download anything you want to keep before redeploying.
   is affected. **Security note:** once configured, anyone with the admin Basic Auth credential can trigger a
   real commit to this GitHub repo (scoped only to the `data/committed/` folder, never your app code) — treat
   that credential as more sensitive once this is turned on, and rotate it periodically.
+
+## Multiple people using the admin portal
+Give each teammate their own entry in `BASIC_AUTH_USERS` (e.g. `demo:demo123,alex:alexpass456`) instead of
+sharing one password — the admin portal now tracks who created each custom API and shows "Signed in as
+{username}" in the header. Anyone can create a new mock API; deleting one is restricted to whoever created
+it, plus anyone listed in `ADMIN_USERS` (defaults to the first username in `BASIC_AUTH_USERS` if unset).
+Editing the JSON files inside an API's folder stays open to everyone with a valid credential — this is a
+lightweight team-sandbox permission model (stop accidental deletes), not a full multi-tenant access-control
+system. If this needs to support genuinely public/untrusted signup later, that's a bigger redesign (real
+accounts, quotas, a real database) rather than an extension of this.
