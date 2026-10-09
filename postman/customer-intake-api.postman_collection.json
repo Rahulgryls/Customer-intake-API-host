@@ -1,0 +1,696 @@
+{
+  "info": {
+    "name": "Customer Intake API",
+    "description": "Customer Details, Risk Profile and Transaction History APIs plus mock-API and utility endpoints. Auth: HTTP Basic (collection-level, uses {{username}}/{{password}}).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "basic",
+    "basic": [
+      {
+        "key": "username",
+        "value": "{{username}}",
+        "type": "string"
+      },
+      {
+        "key": "password",
+        "value": "{{password}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "username",
+      "value": "demo"
+    },
+    {
+      "key": "password",
+      "value": "demo123"
+    },
+    {
+      "key": "customerId",
+      "value": "110023456"
+    },
+    {
+      "key": "mockSlug",
+      "value": "my-api"
+    },
+    {
+      "key": "recordId",
+      "value": "sample"
+    }
+  ],
+  "item": [
+    {
+      "name": "API-01 Customer Details",
+      "item": [
+        {
+          "name": "Get customer (org, 200)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customer-intake/v1/customers/{{customerId}}?idType=RABO_CUSTOMER_ID",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-intake",
+                "v1",
+                "customers",
+                "{{customerId}}"
+              ],
+              "query": [
+                {
+                  "key": "idType",
+                  "value": "RABO_CUSTOMER_ID",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Organisation - De Groot Kaashandel B.V."
+          }
+        },
+        {
+          "name": "Get customer (person, 200)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customer-intake/v1/customers/110034567?idType=RABO_CUSTOMER_ID",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-intake",
+                "v1",
+                "customers",
+                "110034567"
+              ],
+              "query": [
+                {
+                  "key": "idType",
+                  "value": "RABO_CUSTOMER_ID",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Person - Emma van den Berg"
+          }
+        },
+        {
+          "name": "Get customer (watchlist warnings, 200)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customer-intake/v1/customers/110045678",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-intake",
+                "v1",
+                "customers",
+                "110045678"
+              ],
+              "query": []
+            },
+            "description": "Organisation with watchlist warnings"
+          }
+        },
+        {
+          "name": "Get customer by Siebel ID (200)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customer-intake/v1/customers/1-3K7P9Q?idType=SIEBEL_ID",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-intake",
+                "v1",
+                "customers",
+                "1-3K7P9Q"
+              ],
+              "query": [
+                {
+                  "key": "idType",
+                  "value": "SIEBEL_ID",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Same customer as 110023456"
+          }
+        },
+        {
+          "name": "Get customer - exited (422)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customer-intake/v1/customers/110067890",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-intake",
+                "v1",
+                "customers",
+                "110067890"
+              ],
+              "query": []
+            },
+            "description": "Relationship ended"
+          }
+        },
+        {
+          "name": "Get customer - unknown (404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customer-intake/v1/customers/999999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-intake",
+                "v1",
+                "customers",
+                "999999999"
+              ],
+              "query": []
+            },
+            "description": "Unknown customer"
+          }
+        }
+      ]
+    },
+    {
+      "name": "API-02 Risk Profile",
+      "item": [
+        {
+          "name": "Get risk profile (org, 200)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customer-intake/v1/customers/{{customerId}}/risk-profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-intake",
+                "v1",
+                "customers",
+                "{{customerId}}",
+                "risk-profile"
+              ],
+              "query": []
+            },
+            "description": "Organisation risk profile"
+          }
+        },
+        {
+          "name": "Get risk profile (person, 200)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customer-intake/v1/customers/110034567/risk-profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-intake",
+                "v1",
+                "customers",
+                "110034567",
+                "risk-profile"
+              ],
+              "query": []
+            },
+            "description": "Person risk profile"
+          }
+        },
+        {
+          "name": "Get risk profile - sanctions (423)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customer-intake/v1/customers/110056789/risk-profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-intake",
+                "v1",
+                "customers",
+                "110056789",
+                "risk-profile"
+              ],
+              "query": []
+            },
+            "description": "Sanctions match, access blocked"
+          }
+        },
+        {
+          "name": "Get risk profile - no rating (404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customer-intake/v1/customers/110078901/risk-profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-intake",
+                "v1",
+                "customers",
+                "110078901",
+                "risk-profile"
+              ],
+              "query": []
+            },
+            "description": "Prospect, rating pending CDD"
+          }
+        }
+      ]
+    },
+    {
+      "name": "API-03 Transaction History",
+      "item": [
+        {
+          "name": "Get transactions (all accounts, 200)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customer-intake/v1/customers/{{customerId}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-intake",
+                "v1",
+                "customers",
+                "{{customerId}}",
+                "transactions"
+              ],
+              "query": []
+            },
+            "description": "Plain GET returns every account"
+          }
+        },
+        {
+          "name": "Get transactions (filtered, 200)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customer-intake/v1/customers/{{customerId}}/transactions?iban=NL62RABO0300065432&dateFrom=2026-01-01&dateTo=2026-03-31&bookingStatus=BOOKED&pageNumber=1&pageSize=200",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-intake",
+                "v1",
+                "customers",
+                "{{customerId}}",
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "iban",
+                  "value": "NL62RABO0300065432",
+                  "disabled": false
+                },
+                {
+                  "key": "dateFrom",
+                  "value": "2026-01-01",
+                  "disabled": false
+                },
+                {
+                  "key": "dateTo",
+                  "value": "2026-03-31",
+                  "disabled": false
+                },
+                {
+                  "key": "bookingStatus",
+                  "value": "BOOKED",
+                  "disabled": false
+                },
+                {
+                  "key": "pageNumber",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "pageSize",
+                  "value": "200",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Only iban is actually filtered by the mock; the rest are echoed"
+          }
+        },
+        {
+          "name": "Get transactions - unknown (404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customer-intake/v1/customers/999999999/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-intake",
+                "v1",
+                "customers",
+                "999999999",
+                "transactions"
+              ],
+              "query": []
+            },
+            "description": "No transaction data"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Mock APIs (custom)",
+      "item": [
+        {
+          "name": "List records",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customer-intake/v1/mock/{{mockSlug}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-intake",
+                "v1",
+                "mock",
+                "{{mockSlug}}"
+              ],
+              "query": []
+            },
+            "description": "List stored records"
+          }
+        },
+        {
+          "name": "Get record",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customer-intake/v1/mock/{{mockSlug}}/{{recordId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-intake",
+                "v1",
+                "mock",
+                "{{mockSlug}}",
+                "{{recordId}}"
+              ],
+              "query": []
+            },
+            "description": "Get one record"
+          }
+        },
+        {
+          "name": "Create/update record",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customer-intake/v1/mock/{{mockSlug}}/{{recordId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-intake",
+                "v1",
+                "mock",
+                "{{mockSlug}}",
+                "{{recordId}}"
+              ],
+              "query": []
+            },
+            "description": "Store any JSON",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"exampleField\": \"value\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete record",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customer-intake/v1/mock/{{mockSlug}}/{{recordId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-intake",
+                "v1",
+                "mock",
+                "{{mockSlug}}",
+                "{{recordId}}"
+              ],
+              "query": []
+            },
+            "description": "Delete one record"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Utility",
+      "item": [
+        {
+          "name": "Health (no auth)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "OpenAPI spec (no auth)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/openapi.json",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "openapi.json"
+              ]
+            }
+          }
+        },
+        {
+          "name": "API catalog (admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/catalog",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "api",
+                "catalog"
+              ],
+              "query": []
+            },
+            "description": "Connection details for all APIs"
+          }
+        },
+        {
+          "name": "Who am I",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "description": "Optional trace id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/whoami",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "api",
+                "whoami"
+              ],
+              "query": []
+            },
+            "description": "Current user"
+          }
+        }
+      ]
+    }
+  ]
+}
