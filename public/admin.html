@@ -63,7 +63,7 @@
   .filename-tag { font-family: ui-monospace, monospace; color:var(--muted); font-size:12px; }
 
   /* --- Manage APIs page --- */
-  .apis-page { padding:20px; max-width:920px; }
+  .apis-page { padding:20px; max-width:1180px; }
   .apis-note { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-size:12.5px; color:var(--muted); margin-bottom:18px; line-height:1.5; }
   .create-card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:22px; }
   .create-card h2 { font-size:14px; margin:0 0 12px; }
@@ -80,6 +80,52 @@
   .create-status { font-size:12.5px; margin-top:6px; min-height:16px; }
   .create-status.ok { color:var(--ok); }
   .create-status.err { color:var(--danger); }
+
+  /* --- connection details (how to call each API) --- */
+  .conn-card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:14px 16px; margin-bottom:18px; }
+  .conn-card h2 { font-size:13px; margin:0 0 10px; }
+  .kv { display:grid; grid-template-columns:120px 1fr; gap:7px 12px; font-size:12.5px; align-items:baseline; }
+  .kv .k { color:var(--muted); }
+  .url { font-family: ui-monospace, monospace; background:#0f1420; border:1px solid var(--border);
+         padding:3px 7px; border-radius:4px; word-break:break-all; font-size:12px; }
+  a.url { color:#9dc1f5; text-decoration:none; }
+  a.url:hover { border-color:var(--accent); }
+  .copy-btn { background:var(--panel); border:1px solid var(--border); color:var(--muted); font-size:11px;
+              padding:2px 8px; border-radius:4px; cursor:pointer; margin-left:6px; white-space:nowrap; }
+  .copy-btn:hover { color:var(--text); border-color:var(--accent); }
+  .conn-notes { font-size:12px; color:var(--muted); margin:10px 0 0; padding-left:18px; line-height:1.55; }
+  .details-row > td { background:#121929; padding:0 12px 14px; }
+  /* detail tables need real width; scroll them rather than clipping the Notes column */
+  .details-scroll { overflow-x:auto; }
+  .details-scroll table.ptable { min-width:720px; }
+  .op { border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-top:12px; background:var(--panel); }
+  .op-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .method { font-size:10.5px; font-weight:700; padding:3px 8px; border-radius:4px; letter-spacing:.05em; }
+  .method.get { background:#1b3a5c; color:#8dbdf2; }
+  .method.put { background:#45380f; color:#e3b341; }
+  .method.delete { background:#4a1d1f; color:#f07178; }
+  .op-summary { font-size:12.5px; color:var(--muted); margin:9px 0 0; line-height:1.5; }
+  .sec-label { font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:14px 0 5px; }
+  table.ptable { width:100%; border-collapse:collapse; font-size:12px; }
+  table.ptable th { text-align:left; color:var(--muted); font-weight:600; font-size:10px; text-transform:uppercase;
+                    letter-spacing:.04em; padding:4px 8px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  table.ptable td { padding:6px 8px; border-bottom:1px solid #202940; vertical-align:top; line-height:1.45; }
+  table.ptable code { font-family: ui-monospace, monospace; background:#0f1420; padding:1px 5px; border-radius:3px; font-size:11.5px; }
+  .req-yes { color:#f0797e; font-weight:600; }
+  .req-no { color:var(--muted); }
+  pre.code { background:#0f1420; border:1px solid var(--border); border-radius:6px; padding:10px; font-size:11.5px;
+             overflow-x:auto; margin:0; font-family: ui-monospace, monospace; white-space:pre; line-height:1.5; }
+  .resp-list { list-style:none; padding:0; margin:0; font-size:12px; }
+  .resp-list li { padding:3px 0; display:flex; gap:9px; }
+  .resp-code { font-family: ui-monospace, monospace; font-weight:600; min-width:34px; }
+  .resp-2xx { color:var(--ok); } .resp-4xx { color:#e3b341; } .resp-5xx { color:var(--danger); }
+  .op-notes { font-size:12px; color:var(--muted); margin:10px 0 0; padding-left:18px; line-height:1.5; }
+  .none { font-size:12px; color:var(--muted); }
+  .detail-btn { background:var(--panel); border:1px solid var(--border); color:var(--text); font-size:11.5px;
+                padding:4px 10px; border-radius:5px; cursor:pointer; white-space:nowrap; }
+  .detail-btn:hover { border-color:var(--accent); }
+  .endpoint-cell { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
+  .record-url { font-size:11.5px; color:var(--muted); margin:0 0 8px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
 </style>
 </head>
 <body>
@@ -109,6 +155,11 @@
     GET reply with that HTTP status instead of 200 — handy for testing a consuming app's error handling.
     When GitHub persistence is configured on this server, everything here is automatically mirrored to GitHub
     in the background and restored on every startup — otherwise it's local-disk only and resets on redeploy.
+  </div>
+
+  <div class="conn-card" id="connBasics">
+    <h2>How to connect</h2>
+    <div class="none">Loading connection details…</div>
   </div>
 
   <div class="create-card">
@@ -154,8 +205,12 @@
 
   <div class="apis-list">
     <h2>Existing APIs</h2>
+    <p class="builtin-tag" style="margin:0 0 10px;">
+      Click <strong>Connection details</strong> on any API to see its full endpoint URLs, required and optional
+      parameters, headers, status codes and a ready-to-run curl command.
+    </p>
     <table class="apis-table">
-      <thead><tr><th>Name</th><th>Endpoint</th><th>Files</th><th>Created</th><th>Type</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Base endpoint</th><th>Files</th><th>Created</th><th>Type</th><th></th><th></th></tr></thead>
       <tbody id="apisTableBody"></tbody>
     </table>
   </div>
@@ -186,6 +241,7 @@
         <button class="btn" id="saveBtn" disabled>Save</button>
         <button class="btn danger" id="deleteBtn" disabled>Delete</button>
       </div>
+      <div class="record-url" id="recordUrl"></div>
       <div class="editor-wrap"><textarea id="editor"></textarea></div>
       <div class="status" id="status"></div>
       <div class="builtin-tag" id="statusHint" style="margin-top:4px;"></div>
@@ -221,50 +277,233 @@ async function loadWhoami() {
 
 function setCreateStatus(msg, ok) { createStatusEl.textContent = msg; createStatusEl.className = "create-status " + (ok === true ? "ok" : ok === false ? "err" : ""); }
 
+// ---------- connection details rendering ----------
+// Everything below turns /admin/api/catalog into the "how do I call this?" panels:
+// endpoint URLs, every parameter and header with required/optional, status codes and
+// a copyable curl command — for built-in and self-service mock APIs alike.
+let catalog = null;                 // last loaded /admin/api/catalog response
+let recordUrlTemplates = {};        // slug -> absolute URL template with {recordId}
+const openDetails = new Set();      // slugs whose details panel is expanded
+
+const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+const esc = s => String(s === null || s === undefined ? "" : s).replace(/[&<>"']/g, c => ESCAPES[c]);
+
+// Copy payloads are held in an array and referenced by index, so a multi-line curl
+// command never has to survive being escaped into an HTML attribute.
+const copyPayloads = [];
+function copyButton(text, label) {
+  const idx = copyPayloads.push(text) - 1;
+  return `<button class="copy-btn" data-copy="${idx}">${esc(label || "Copy")}</button>`;
+}
+function wireCopyButtons(root) {
+  root.querySelectorAll(".copy-btn").forEach(btn => {
+    if (btn.dataset.wired) return;
+    btn.dataset.wired = "1";
+    btn.onclick = async () => {
+      const text = copyPayloads[Number(btn.dataset.copy)];
+      const label = btn.textContent;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          // http://localhost and older browsers: no async clipboard API
+          const ta = document.createElement("textarea");
+          ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+          document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
+        }
+        btn.textContent = "Copied";
+      } catch { btn.textContent = "Copy failed"; }
+      setTimeout(() => { btn.textContent = label; }, 1400);
+    };
+  });
+}
+
+function paramRows(params, where) {
+  return (params || []).map(p => {
+    const extras = [
+      p.enum ? `one of: ${p.enum.join(", ")}` : "",
+      p.default !== undefined && p.default !== null ? `default: ${p.default}` : ""
+    ].filter(Boolean).map(t => `<div class="req-no">${esc(t)}</div>`).join("");
+    return `<tr>
+      <td><code>${esc(p.name)}</code></td>
+      <td>${esc(where)}</td>
+      <td>${p.required ? '<span class="req-yes">required</span>' : '<span class="req-no">optional</span>'}</td>
+      <td>${esc(p.type || "string")}${extras}</td>
+      <td><code>${esc(p.example)}</code></td>
+      <td>${esc(p.description || "")}</td>
+    </tr>`;
+  }).join("");
+}
+
+function parameterSection(op) {
+  const rows = paramRows(op.pathParams, "path") + paramRows(op.queryParams, "query") + paramRows(op.headers, "header");
+  if (!rows) return '<div class="none">No parameters.</div>';
+  return `<table class="ptable">
+    <thead><tr><th>Name</th><th>In</th><th>Required</th><th>Type</th><th>Example</th><th>Notes</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+function statusClass(status) { return status < 300 ? "resp-2xx" : status < 500 ? "resp-4xx" : "resp-5xx"; }
+
+function responseList(responses) {
+  return `<ul class="resp-list">${(responses || []).map(r =>
+    `<li><span class="resp-code ${statusClass(r.status)}">${esc(r.status)}</span><span>${esc(r.description)}</span></li>`
+  ).join("")}</ul>`;
+}
+
+function operationBlock(op) {
+  const exampleLink = op.method === "GET"
+    ? `<a class="url" href="${esc(op.exampleUrl)}" target="_blank" rel="noopener">${esc(op.exampleUrl)}</a>`
+    : `<span class="url">${esc(op.exampleUrl)}</span>`;
+  const bodySection = op.requestBody ? `
+    <div class="sec-label">Request body — ${esc(op.requestBody.contentType)}, ${op.requestBody.required ? "required" : "optional"}</div>
+    <div class="op-summary" style="margin-top:0">${esc(op.requestBody.description || "")}</div>
+    <pre class="code">${esc(JSON.stringify(op.requestBody.example, null, 2))}</pre>` : "";
+  const notes = op.notes && op.notes.length
+    ? `<ul class="op-notes">${op.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : "";
+
+  return `<div class="op">
+    <div class="op-head">
+      <span class="method ${op.method.toLowerCase()}">${esc(op.method)}</span>
+      <span class="url">${esc(op.urlTemplate)}</span>
+      ${copyButton(op.urlTemplate, "Copy URL")}
+    </div>
+    <div class="op-summary">${esc(op.summary)}</div>
+    <div class="sec-label">Parameters &amp; headers</div>
+    ${parameterSection(op)}
+    ${bodySection}
+    <div class="sec-label">Responses</div>
+    ${responseList(op.responses)}
+    <div class="sec-label">Example request ${copyButton(op.curl, "Copy curl")}</div>
+    <pre class="code">${esc(op.curl)}</pre>
+    <div class="op-summary">Example URL: ${exampleLink}${copyButton(op.exampleUrl, "Copy")}</div>
+    ${notes}
+  </div>`;
+}
+
+function examplesSection(api) {
+  if (api.kind === "built-in" && api.examples && api.examples.length) {
+    const rows = api.examples.map(e => `<tr>
+      <td><code>${esc(e.id)}</code></td>
+      <td><span class="resp-code ${statusClass(Number(e.outcome))}">${esc(e.outcome)}</span></td>
+      <td>${esc(e.note)}</td></tr>`).join("");
+    return `<div class="sec-label">Identifiers you can try</div>
+      <table class="ptable"><thead><tr><th>Identifier</th><th>Returns</th><th>What it is</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+  }
+  if (api.kind === "custom") {
+    const ids = api.availableIds || [];
+    return `<div class="sec-label">Record ids currently stored</div>` + (ids.length
+      ? `<div style="font-size:12px; line-height:1.9">${ids.map(i => `<code>${esc(i)}</code>`).join(" ")}</div>`
+      : `<div class="none">None yet — add one in the Manage Data tab, or PUT one to the endpoint above.</div>`);
+  }
+  return "";
+}
+
+function detailsPanel(api) {
+  return `<div class="details-scroll">${api.operations.map(operationBlock).join("") + examplesSection(api)}</div>`;
+}
+
+function renderConnBasics(cat) {
+  const el = $("#connBasics");
+  el.innerHTML = `
+    <h2>How to connect</h2>
+    <div class="kv">
+      <div class="k">Base URL</div>
+      <div><span class="url">${esc(cat.baseUrl)}</span>${copyButton(cat.baseUrl, "Copy")}</div>
+      <div class="k">Authentication</div>
+      <div>${esc(cat.auth.type)} — ${esc(cat.auth.description)}</div>
+      <div class="k">curl auth flag</div>
+      <div><span class="url">${esc(cat.auth.curlFlag)}</span>${copyButton(cat.auth.curlFlag, "Copy")}</div>
+      <div class="k">Swagger UI</div>
+      <div><a class="url" href="${esc(cat.links.swaggerUi)}" target="_blank" rel="noopener">${esc(cat.links.swaggerUi)}</a></div>
+      <div class="k">OpenAPI JSON</div>
+      <div><a class="url" href="${esc(cat.links.openapiJson)}" target="_blank" rel="noopener">${esc(cat.links.openapiJson)}</a></div>
+      <div class="k">Health check</div>
+      <div><a class="url" href="${esc(cat.links.health)}" target="_blank" rel="noopener">${esc(cat.links.health)}</a></div>
+    </div>
+    <ul class="conn-notes">${cat.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>`;
+  wireCopyButtons(el);
+}
+
+async function loadCatalog() {
+  const res = await fetch("/admin/api/catalog");
+  if (!res.ok) { setCreateStatus("Could not load connection details (" + res.status + ")", false); return null; }
+  catalog = await res.json();
+  recordUrlTemplates = {};
+  catalog.apis.forEach(a => { recordUrlTemplates[a.slug] = a.recordUrlTemplate; });
+  populateTargetFolder(
+    catalog.apis.filter(a => a.kind === "custom"),
+    catalog.apis.filter(a => a.kind === "built-in").map(a => a.slug)
+  );
+  return catalog;
+}
+
 async function refreshApis() {
   if (!whoami.username) await loadWhoami();
   $("#whoamiLine").textContent = `Signed in as ${whoami.username}${whoami.isAdmin ? " (admin)" : ""}`;
-  const res = await fetch("/admin/api/apis");
-  if (!res.ok) return;
-  const data = await res.json();
-  renderApisTable(data.apis, data.builtIn);
-  populateTargetFolder(data.apis, data.builtIn);
+  const cat = await loadCatalog();
+  if (!cat) return;
+  renderConnBasics(cat);
+  renderApisTable(cat.apis);
 }
 
-function renderApisTable(apis, builtIn) {
+function renderApisTable(apis) {
   apisTableBody.innerHTML = "";
-  const builtinRows = builtIn.map(slug => ({
-    slug, displayName: slug, description: "Built-in, hand-coded business API", endpoint: `/customer-intake/v1/${slug === "customers" ? "customers/{id}" : slug + "/{customerId}"}`,
-    fileCount: null, createdAt: null, builtin: true
-  }));
-  [...builtinRows, ...apis.map(a => ({ ...a, builtin: false }))].forEach(a => {
-    const tr = document.createElement("tr");
+  apis.forEach(a => {
+    const builtin = a.kind === "built-in";
     const created = a.createdAt ? new Date(a.createdAt).toLocaleString() : "—";
-    const files = a.fileCount === null ? "—" : a.fileCount;
     const owner = [a.team, a.contact].filter(Boolean).join(" · ");
     const tags = a.tags && a.tags.length ? a.tags.join(", ") : "";
     const createdByLine = a.createdBy && a.createdBy !== "unknown" ? `Created by: ${a.createdBy}` : "";
-    const subLines = [a.description, owner, tags, createdByLine].filter(Boolean).map(l => `<div class="builtin-tag">${l}</div>`).join("");
-    const canDelete = !a.builtin && (whoami.isAdmin || a.createdBy === whoami.username);
-    const deleteCell = a.builtin ? "" : canDelete
-      ? `<button class="btn danger delApiBtn" data-slug="${a.slug}">Delete</button>`
-      : `<button class="btn danger" disabled title="Only ${a.createdBy || "the creator"} or an admin can delete this">Delete</button>`;
+    const subLines = [a.description, owner, tags, createdByLine].filter(Boolean)
+      .map(l => `<div class="builtin-tag">${esc(l)}</div>`).join("");
+    const canDelete = !builtin && (whoami.isAdmin || a.createdBy === whoami.username);
+    const deleteCell = builtin ? "" : canDelete
+      ? `<button class="btn danger delApiBtn" data-slug="${esc(a.slug)}">Delete</button>`
+      : `<button class="btn danger" disabled title="Only ${esc(a.createdBy || "the creator")} or an admin can delete this">Delete</button>`;
+    const baseEndpoint = a.operations.length ? a.operations[0].urlTemplate : "";
+
+    const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${a.displayName}${subLines}</td>
-      <td><code>${a.endpoint}</code></td>
-      <td>${files}</td>
-      <td>${created}</td>
-      <td>${a.builtin ? '<span class="builtin-tag">built-in</span>' : '<span class="builtin-tag">custom / mock</span>'}</td>
+      <td>${esc(a.displayName)}${subLines}</td>
+      <td><div class="endpoint-cell"><span class="url">${esc(baseEndpoint)}</span>${copyButton(baseEndpoint, "Copy")}</div></td>
+      <td>${esc(a.fileCount)}</td>
+      <td>${esc(created)}</td>
+      <td><span class="builtin-tag">${builtin ? "built-in" : "custom / mock"}</span></td>
+      <td><button class="detail-btn" data-slug="${esc(a.slug)}"></button></td>
       <td>${deleteCell}</td>
     `;
     apisTableBody.appendChild(tr);
+
+    // Details live in their own row so the panel can span the full table width.
+    const detailTr = document.createElement("tr");
+    detailTr.className = "details-row";
+    detailTr.innerHTML = `<td colspan="7">${detailsPanel(a)}</td>`;
+    apisTableBody.appendChild(detailTr);
+
+    const toggle = tr.querySelector(".detail-btn");
+    const applyOpenState = () => {
+      const open = openDetails.has(a.slug);
+      detailTr.style.display = open ? "" : "none";
+      toggle.textContent = open ? "Hide details" : "Connection details";
+    };
+    toggle.onclick = () => {
+      if (openDetails.has(a.slug)) openDetails.delete(a.slug); else openDetails.add(a.slug);
+      applyOpenState();
+    };
+    applyOpenState();
   });
-  document.querySelectorAll(".delApiBtn").forEach(btn => {
+
+  wireCopyButtons(apisTableBody);
+
+  apisTableBody.querySelectorAll(".delApiBtn").forEach(btn => {
     btn.onclick = async () => {
       const slug = btn.dataset.slug;
       if (!confirm(`Delete the "${slug}" API and all its stored files? This cannot be undone.`)) return;
       const res = await fetch(`/admin/api/apis/${encodeURIComponent(slug)}`, { method: "DELETE" });
-      if (res.ok) { await refreshApis(); } else setCreateStatus("Delete failed (" + res.status + ")", false);
+      if (res.ok) { openDetails.delete(slug); await refreshApis(); }
+      else setCreateStatus("Delete failed (" + res.status + ")", false);
     };
   });
 }
@@ -305,9 +544,10 @@ $("#createApiBtn").onclick = async () => {
   });
   const data = await res.json();
   if (res.ok) {
-    setCreateStatus(`Created "${data.displayName}" — endpoint: ${data.endpoint}`, true);
+    setCreateStatus(`Created "${data.displayName}" — its endpoint URLs and parameters are listed under Connection details below`, true);
     apiNameEl.value = ""; apiDescEl.value = ""; apiSampleEl.value = "";
     apiTeamEl.value = ""; apiContactEl.value = ""; apiTagsEl.value = ""; apiSampleRequestEl.value = "";
+    openDetails.add(data.slug);   // show the new API's connection details straight away
     await refreshApis();
   } else {
     setCreateStatus(data.errors ? data.errors[0].detail : "Failed to create API", false);
@@ -324,6 +564,23 @@ let collapsed = {};
 
 const treeEl = $("#tree"), statusEl = $("#status"), countsEl = $("#counts"), currentFileEl = $("#currentFile");
 const saveBtn = $("#saveBtn"), deleteBtn = $("#deleteBtn"), downloadBtn = $("#downloadBtn"), renameBtn = $("#renameBtn"), commitBtn = $("#commitBtn"), targetFolderEl = $("#targetFolder"), statusHintEl = $("#statusHint");
+
+// Shows the live URL that serves the record currently open in the editor, so it's
+// obvious how a consuming app reaches the data you are editing. `saved` is false for
+// a new/uploaded record that hasn't been written yet (the URL won't resolve until it is).
+function updateRecordUrl(category, id, saved) {
+  const el = $("#recordUrl");
+  const template = recordUrlTemplates[category];
+  if (!template || !id) { el.innerHTML = ""; return; }
+  const url = template.replace("{recordId}", encodeURIComponent(id));
+  const link = saved
+    ? `<a class="url" href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`
+    : `<span class="url">${esc(url)}</span>`;
+  el.innerHTML = `<span>Served at</span><span class="method get">GET</span>${link}` +
+    copyButton(url, "Copy") +
+    (saved ? "" : `<span>— available once you click Save</span>`);
+  wireCopyButtons(el);
+}
 
 function updateStatusHint(category) {
   statusHintEl.textContent = (category && !BUILTIN_LABEL.hasOwnProperty(category))
@@ -355,11 +612,9 @@ function fmtBytes(n) { return n < 1024 ? n + " B" : (n / 1024).toFixed(1) + " KB
 function fmtDate(iso) { return new Date(iso).toLocaleString(); }
 
 async function refreshList() {
-  // make sure folderLabels includes any custom APIs even if the Manage APIs tab hasn't loaded yet
-  if (Object.keys(folderLabels).length <= 3) {
-    const apiRes = await fetch("/admin/api/apis");
-    if (apiRes.ok) { const d = await apiRes.json(); populateTargetFolder(d.apis, d.builtIn); }
-  }
+  // the catalog gives us folder labels AND the live URL of each record, so load it
+  // first if the Manage APIs tab hasn't already done so
+  if (!catalog) await loadCatalog();
   const res = await fetch("/admin/api/files");
   if (!res.ok) { setStatus("Failed to list files (" + res.status + ")", false); return; }
   const data = await res.json();
@@ -417,6 +672,7 @@ async function openFile(category, id) {
   renameBtn.disabled = false; commitBtn.disabled = false;
   setStatus("Loaded " + id, null);
   updateStatusHint(category);
+  updateRecordUrl(category, id, true);
   renderTree();
 }
 
@@ -440,6 +696,7 @@ $("#newBtn").onclick = () => {
   renameBtn.disabled = true; commitBtn.disabled = true;
   setStatus(`New file template ready in "${folderLabels[category] || category}" — edit then Save`, null);
   updateStatusHint(category);
+  updateRecordUrl(category, id, false);
 };
 
 $("#saveBtn").onclick = async () => {
@@ -452,6 +709,7 @@ $("#saveBtn").onclick = async () => {
   });
   if (res.ok) {
     setStatus("Saved " + currentId, true);
+    updateRecordUrl(currentCategory, currentId, true);
     deleteBtn.disabled = false; downloadBtn.disabled = false; renameBtn.disabled = false; commitBtn.disabled = false;
     await refreshList();
   } else setStatus("Save failed (" + res.status + ")", false);
@@ -464,6 +722,7 @@ $("#deleteBtn").onclick = async () => {
   if (res.ok) {
     setStatus("Deleted " + currentId, true);
     currentCategory = null; currentId = null; cm.setValue(""); currentFileEl.textContent = "No file selected";
+    $("#recordUrl").innerHTML = "";
     saveBtn.disabled = true; deleteBtn.disabled = true; downloadBtn.disabled = true; renameBtn.disabled = true; commitBtn.disabled = true;
     await refreshList();
   } else setStatus("Delete failed (" + res.status + ")", false);
@@ -481,6 +740,7 @@ $("#renameBtn").onclick = async () => {
     setStatus(`Renamed ${currentId} → ${data.newId}`, true);
     currentId = data.newId;
     currentFileEl.textContent = `${currentCategory}/${currentId}.json`;
+    updateRecordUrl(currentCategory, currentId, true);
     await refreshList();
     renderTree();
   } else setStatus(data.errors ? data.errors[0].detail : "Rename failed", false);
@@ -521,6 +781,7 @@ $("#fileInput").onchange = async (e) => {
   saveBtn.disabled = false; downloadBtn.disabled = true; renameBtn.disabled = true; commitBtn.disabled = true;
   setStatus(`Loaded upload "${file.name}" into "${folderLabels[category] || category}" as ID "${id}" — review and click Save to write it`, null);
   updateStatusHint(category);
+  updateRecordUrl(category, id, false);
   e.target.value = "";
 };
 

@@ -43,6 +43,15 @@ No free host is truly always-on with zero cold start (Render, Koyeb, etc. all sc
 
 ## Admin portal
 Live at `/admin` (same Basic Auth as the API). Two tabs:
+- **Manage APIs** — see how to call every API on this host, and create new mock/stub APIs. A
+  **How to connect** card at the top gives the base URL, the authentication scheme and the Swagger /
+  OpenAPI / health links. Every API in the list — built-in and custom alike — has a **Connection details**
+  button that expands into its full endpoint URL per operation, every path, query and header parameter
+  marked required or optional (with type, example and what it does), the request body shape where one
+  applies, the status codes it can return, a ready-to-run `curl` command and a clickable example URL.
+  Built-in APIs also list the sample identifiers that trigger each outcome (200 / 404 / 422 / 423);
+  custom APIs list the record ids currently stored. Nothing is hardcoded to one host: the URLs are built
+  from the request, so they're correct on Render and on localhost.
 - **Manage APIs** — create a brand-new *mock/stub* API on the fly: give it a name, an optional description,
   and an optional sample JSON response. The app creates a generic endpoint at
   `/customer-intake/v1/mock/{your-api-slug}` that stores and returns whatever JSON you put in it (list, get,
@@ -52,12 +61,21 @@ Live at `/admin` (same Basic Auth as the API). Two tabs:
   still means writing a proper route by hand (same pattern as Customer Details / Risk Profile / Transactions).
 - **Manage Data** — a folder-tree file browser (master folder → one folder per API → JSON records inside)
   covering both the built-in APIs and anything created in Manage APIs. Open, edit (with a linted JSON editor),
-  upload, download, or delete any record.
+  upload, download, or delete any record. Whichever record is open shows the live **Served at** URL that
+  returns it, so it's obvious how a consuming app reaches the data being edited.
 
 Everything the admin portal creates or edits (custom APIs, their data, and edits to the built-in seed data)
 lives on this server's local disk — same as the rest of this app's data. It survives normal restarts but
 resets on a fresh deploy (git push) unless a persistent volume or real database is added. Treat it as
 POC/demo storage: download anything you want to keep before redeploying.
+
+### Where the connection details come from
+`data/apiCatalog.js` is the single source of truth behind those panels and the `GET /admin/api/catalog`
+endpoint that feeds them. Built-in APIs are described by hand there (only a human can say which parameters
+really matter, and the mock deliberately documents where it *doesn't* filter, e.g. `dateFrom`/`bookingStatus`
+on Transaction History are echoed but not applied); custom mock APIs are generated from their registry entry,
+since they all share the same store-and-return shape. **When you change a built-in route in `server.js`,
+update `apiCatalog.js` in the same commit** — stale documentation is worse than none.
 
 ## Persistence: GitHub as the durable backing store
 By default, everything (built-in seed data, custom APIs, uploaded files) lives on the server's local disk,

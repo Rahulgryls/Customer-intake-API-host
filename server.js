@@ -241,6 +241,17 @@ app.post("/admin/api/files/:category/:id/commit", async (req, res) => {
   res.json({ status: "ok", path: repoPath, htmlUrl: result.htmlUrl });
 });
 
+// --- Admin: connection details ("how do I call this?") for every API on this host ---
+// Built-in and custom APIs alike, with absolute URLs built from the incoming request so
+// the portal shows the real public host (Render, localhost, whatever) rather than a
+// hardcoded one. Backs the "Connection details" panels in the admin portal.
+const { buildCatalog } = require("./data/apiCatalog");
+
+app.get("/admin/api/catalog", (req, res) => {
+  const baseUrl = `${req.protocol}://${req.get("host")}`;
+  res.json(buildCatalog({ baseUrl, username: req.user }));
+});
+
 // --- Admin: API registry (create/list/delete custom mock APIs) ---
 app.get("/admin/api/apis", (req, res) => {
   const apis = store.listApis().map(a => ({
