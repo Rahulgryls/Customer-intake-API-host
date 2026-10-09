@@ -22,7 +22,7 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:3000"
+      "value": "https://customer-intake-api-host.onrender.com"
     },
     {
       "key": "username",

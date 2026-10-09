@@ -119,3 +119,10 @@ Editing the JSON files inside an API's folder stays open to everyone with a vali
 lightweight team-sandbox permission model (stop accidental deletes), not a full multi-tenant access-control
 system. If this needs to support genuinely public/untrusted signup later, that's a bigger redesign (real
 accounts, quotas, a real database) rather than an extension of this.
+
+## Postman
+Import `postman/customer-intake-api.postman_collection.json` (and optionally
+`postman/customer-intake-render.postman_environment.json`) into Postman. The collection defaults to
+`https://customer-intake-api-host.onrender.com` with `demo` / `demo123`; change `baseUrl`, `username` and
+`password` in the collection or environment variables. The free Render instance sleeps when idle, so the
+first call can take 30-60s.
